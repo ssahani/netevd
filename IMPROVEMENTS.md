@@ -274,7 +274,7 @@ examples/scripts/
 
 ### 17. Add systemd Socket Activation
 **Purpose**: On-demand startup  
-**File**: `distribution/netevd.socket`
+**File**: `systemd/ and examples/netevd.socket`
 
 ### 18. Add Rate Limiting for Script Execution
 **Purpose**: Prevent script flooding  
@@ -329,7 +329,7 @@ assert!(caps.contains(&Capability::CAP_NET_ADMIN));
 
 ### 25. Add SELinux Policy
 **Purpose**: Confine daemon  
-**File**: `distribution/netevd.te`
+**File**: `systemd/ and examples/netevd.te`
 
 ### 26. Validate Script Paths
 **Purpose**: Prevent directory traversal  

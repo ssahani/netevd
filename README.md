@@ -449,8 +449,8 @@ cd netevd
 # Build and install
 cargo build --release
 sudo install -Dm755 target/release/netevd /usr/bin/netevd
-sudo install -Dm644 distribution/netevd.service /lib/systemd/system/netevd.service
-sudo install -Dm644 distribution/netevd.yaml /etc/netevd/netevd.yaml
+sudo install -Dm644 systemd/netevd.service /lib/systemd/system/netevd.service
+sudo install -Dm644 examples/netevd.yaml /etc/netevd/netevd.yaml
 
 # Create script directories
 sudo mkdir -p /etc/netevd/{carrier.d,configured.d,degraded.d,manager.d,no-carrier.d,routable.d,routes.d,activated.d,disconnected.d}
@@ -948,10 +948,10 @@ cargo clippy
 sudo install -Dm755 target/release/netevd /usr/bin/netevd
 
 # Install systemd service
-sudo install -Dm644 distribution/netevd.service /lib/systemd/system/netevd.service
+sudo install -Dm644 systemd/netevd.service /lib/systemd/system/netevd.service
 
 # Install configuration
-sudo install -Dm644 distribution/netevd.yaml /etc/netevd/netevd.yaml
+sudo install -Dm644 examples/netevd.yaml /etc/netevd/netevd.yaml
 
 # Create user
 sudo useradd -r -s /usr/bin/nologin -d /nonexistent netevd

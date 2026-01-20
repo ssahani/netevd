@@ -158,7 +158,7 @@ netevd --version  # Will fail without config, but shows it's installed
 sudo mkdir -p /etc/netevd
 
 # Install default configuration
-sudo install -Dm644 distribution/netevd.yaml /etc/netevd/netevd.yaml
+sudo install -Dm644 examples/netevd.yaml /etc/netevd/netevd.yaml
 
 # Create script directories
 sudo mkdir -p /etc/netevd/{carrier.d,no-carrier.d,configured.d,degraded.d,routable.d,activated.d,disconnected.d,manager.d,routes.d}
@@ -168,7 +168,7 @@ sudo mkdir -p /etc/netevd/{carrier.d,no-carrier.d,configured.d,degraded.d,routab
 
 ```bash
 # Install service file
-sudo install -Dm644 distribution/netevd.service /lib/systemd/system/netevd.service
+sudo install -Dm644 systemd/netevd.service /lib/systemd/system/netevd.service
 
 # Reload systemd
 sudo systemctl daemon-reload
