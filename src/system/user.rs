@@ -97,4 +97,27 @@ mod tests {
             assert_eq!(uid.as_raw(), 0);
         }
     }
+
+    #[test]
+    fn test_drop_privileges_non_root() {
+        // If not running as root, drop_privileges should skip
+        if !is_root() {
+            let result = drop_privileges("netevd");
+            assert!(result.is_ok(), "drop_privileges should succeed when not root");
+        }
+    }
+
+    #[test]
+    fn test_lookup_user_empty_string() {
+        let result = lookup_user("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_is_root_consistency() {
+        // is_root should be consistent with checking effective UID
+        let is_root_result = is_root();
+        let uid_check = Uid::effective().as_raw() == 0;
+        assert_eq!(is_root_result, uid_check);
+    }
 }

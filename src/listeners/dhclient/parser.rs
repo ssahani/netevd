@@ -109,12 +109,25 @@ pub fn parse_lease_file(path: &str) -> Result<HashMap<String, Lease>> {
     Ok(leases)
 }
 
-/// Extract value from lines like "option routers 192.168.1.1;"
+/// Extract value from lines like "option routers 192.168.1.1;" or "option domain-name-servers 8.8.8.8, 8.8.4.4;"
 fn extract_value(line: &str) -> Option<String> {
-    line.split_whitespace()
-        .last()
-        .and_then(|s| s.strip_suffix(';'))
-        .map(|s| s.to_string())
+    // Find the last occurrence of a space before the semicolon
+    // This handles both single values and comma-separated lists
+    let semicolon_pos = line.rfind(';')?;
+    let value_part = &line[..semicolon_pos];
+
+    // Find where the actual value starts (after the last space before option name ends)
+    // For "  option domain-name-servers 8.8.8.8, 8.8.4.4", we want "8.8.8.8, 8.8.4.4"
+    let parts: Vec<&str> = value_part.split_whitespace().collect();
+    if parts.len() >= 3 {
+        // Join everything after "option" and the option name
+        Some(parts[2..].join(" "))
+    } else if parts.len() == 2 {
+        // Simple case like "fixed-address 192.168.1.1"
+        Some(parts[1].to_string())
+    } else {
+        None
+    }
 }
 
 /// Extract quoted value from lines like 'interface "eth0";'
@@ -154,5 +167,168 @@ mod tests {
             extract_quoted_value("option domain-name \"example.com\";"),
             Some("example.com".to_string())
         );
+    }
+
+    #[test]
+    fn test_parse_valid_lease_file() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let lease_content = r#"
+lease 192.168.1.100 {
+  interface "eth0";
+  fixed-address 192.168.1.100;
+  option subnet-mask 255.255.255.0;
+  option routers 192.168.1.1;
+  option domain-name-servers 8.8.8.8, 8.8.4.4;
+  option domain-name "example.com";
+  option host-name "myhost";
+}
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(lease_content.as_bytes()).unwrap();
+        temp_file.flush().unwrap();
+
+        let leases = parse_lease_file(temp_file.path().to_str().unwrap()).unwrap();
+
+        assert_eq!(leases.len(), 1);
+        let lease = leases.get("eth0").unwrap();
+        assert_eq!(lease.address, "192.168.1.100");
+        assert_eq!(lease.subnet_mask, Some("255.255.255.0".to_string()));
+        assert_eq!(lease.routers, vec!["192.168.1.1"]);
+        assert_eq!(lease.dns_servers, vec!["8.8.8.8", "8.8.4.4"]);
+        assert_eq!(lease.domain_name, Some("example.com".to_string()));
+        assert_eq!(lease.hostname, Some("myhost".to_string()));
+    }
+
+    #[test]
+    fn test_parse_multiple_leases() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let lease_content = r#"
+lease 192.168.1.100 {
+  interface "eth0";
+  option routers 192.168.1.1;
+}
+
+lease 10.0.0.50 {
+  interface "eth1";
+  option routers 10.0.0.1;
+}
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(lease_content.as_bytes()).unwrap();
+        temp_file.flush().unwrap();
+
+        let leases = parse_lease_file(temp_file.path().to_str().unwrap()).unwrap();
+
+        assert_eq!(leases.len(), 2);
+        assert!(leases.contains_key("eth0"));
+        assert!(leases.contains_key("eth1"));
+    }
+
+    #[test]
+    fn test_parse_malformed_lease_file() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // Missing interface - should be ignored
+        let lease_content = r#"
+lease 192.168.1.100 {
+  option routers 192.168.1.1;
+}
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(lease_content.as_bytes()).unwrap();
+        temp_file.flush().unwrap();
+
+        let leases = parse_lease_file(temp_file.path().to_str().unwrap()).unwrap();
+
+        // Should be empty because interface is missing
+        assert_eq!(leases.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_empty_file() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(b"").unwrap();
+        temp_file.flush().unwrap();
+
+        let leases = parse_lease_file(temp_file.path().to_str().unwrap()).unwrap();
+
+        assert_eq!(leases.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_nonexistent_file() {
+        let result = parse_lease_file("/nonexistent/path/to/lease.file");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_extract_value_edge_cases() {
+        assert_eq!(extract_value("no semicolon"), None);
+        assert_eq!(extract_value(""), None);
+        assert_eq!(extract_value(";"), None); // Changed: empty line with just semicolon has no value
+    }
+
+    #[test]
+    fn test_extract_quoted_value_edge_cases() {
+        assert_eq!(extract_quoted_value("no quotes"), None);
+        assert_eq!(extract_quoted_value("\"only one quote"), None);
+        assert_eq!(extract_quoted_value("\"\""), Some("".to_string()));
+    }
+
+    #[test]
+    fn test_parse_lease_with_comments() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let lease_content = r#"
+# Comment line
+lease 192.168.1.100 {
+  interface "eth0";  # inline comment
+  option routers 192.168.1.1;
+}
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(lease_content.as_bytes()).unwrap();
+        temp_file.flush().unwrap();
+
+        let leases = parse_lease_file(temp_file.path().to_str().unwrap()).unwrap();
+
+        assert_eq!(leases.len(), 1);
+        assert!(leases.contains_key("eth0"));
+    }
+
+    #[test]
+    fn test_parse_lease_multiple_dns() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let lease_content = r#"
+lease 192.168.1.100 {
+  interface "eth0";
+  option domain-name-servers 8.8.8.8, 8.8.4.4, 1.1.1.1;
+}
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(lease_content.as_bytes()).unwrap();
+        temp_file.flush().unwrap();
+
+        let leases = parse_lease_file(temp_file.path().to_str().unwrap()).unwrap();
+
+        let lease = leases.get("eth0").unwrap();
+        assert_eq!(lease.dns_servers.len(), 3);
+        assert_eq!(lease.dns_servers, vec!["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
     }
 }

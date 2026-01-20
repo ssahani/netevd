@@ -10,6 +10,14 @@ readme = "README.md"
 keywords = ["networking", "systemd", "dhclient", "netlink", "dbus"]
 categories = ["network-programming", "os::linux-apis"]
 
+[[bin]]
+name = "netevd"
+path = "src/main.rs"
+
+[lib]
+name = "netevd"
+path = "src/lib.rs"
+
 [dependencies]
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }
@@ -53,6 +61,9 @@ thiserror = "1.0"
 
 # Network types
 ipnetwork = "0.20"
+
+[dev-dependencies]
+tempfile = "3.8"
 
 [profile.release]
 opt-level = 3

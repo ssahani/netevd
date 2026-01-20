@@ -78,4 +78,51 @@ mod tests {
         let _net_admin = Capability::CAP_NET_ADMIN;
         let _sys_admin = Capability::CAP_SYS_ADMIN;
     }
+
+    #[test]
+    fn test_has_capability() {
+        // Test that has_capability doesn't panic
+        let result = has_capability(Capability::CAP_NET_ADMIN);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_capability_check_multiple() {
+        // Check multiple capabilities
+        let caps_to_check = vec![
+            Capability::CAP_NET_ADMIN,
+            Capability::CAP_SYS_ADMIN,
+            Capability::CAP_DAC_OVERRIDE,
+        ];
+
+        for cap in caps_to_check {
+            let result = has_capability(cap);
+            assert!(result.is_ok(), "Failed to check capability {:?}", cap);
+        }
+    }
+
+    #[test]
+    fn test_keep_capabilities_toggles() {
+        // If running as root, test PR_SET_KEEPCAPS toggling
+        if nix::unistd::Uid::effective().is_root() {
+            // Enable keep capabilities
+            let result = keep_capabilities();
+            assert!(result.is_ok(), "Failed to enable keep capabilities");
+
+            // Disable keep capabilities
+            let result = clear_keep_capabilities();
+            assert!(result.is_ok(), "Failed to disable keep capabilities");
+        }
+    }
+
+    #[test]
+    fn test_apply_capabilities_non_root() {
+        // If not running as root, apply_capabilities should handle gracefully
+        if !nix::unistd::Uid::effective().is_root() {
+            // This will likely fail, but shouldn't panic
+            let result = apply_capabilities();
+            // Just ensure it returns a result (either Ok or Err)
+            let _is_ok = result.is_ok();
+        }
+    }
 }
