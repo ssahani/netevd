@@ -17,8 +17,9 @@ User=netevd
 Group=netevd
 
 # Capabilities needed for network configuration
-AmbientCapabilities=CAP_NET_ADMIN CAP_SYS_ADMIN
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_SYS_ADMIN
+# Only CAP_NET_ADMIN is required for routing tables and netlink operations
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
 
 # Hardening
 NoNewPrivileges=true

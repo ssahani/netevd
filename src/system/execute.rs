@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Script execution
+//! Script execution with input validation
+//!
+//! This module executes user scripts with environment variables from potentially
+//! untrusted sources (DHCP, network configurations). All environment values are
+//! validated and sanitized before being passed to scripts.
 
 use anyhow::{Context, Result};
 use std::collections::HashMap;
@@ -10,6 +14,8 @@ use std::process::Stdio;
 use tokio::fs;
 use tokio::process::Command;
 use tracing::{debug, info, warn};
+
+use crate::system::validation;
 
 /// Execute all scripts in a directory with provided environment variables
 pub async fn execute_scripts(
@@ -87,14 +93,51 @@ pub async fn execute_scripts(
 }
 
 /// Execute a single script with environment variables
+///
+/// All environment variable values are validated and sanitized to prevent
+/// command injection attacks. Dangerous values are rejected with warnings.
 async fn execute_script(script_path: &Path, env_vars: &HashMap<String, String>) -> Result<()> {
     debug!("Executing script: {:?}", script_path);
 
     let mut cmd = Command::new(script_path);
 
-    // Set environment variables
+    // Validate and set environment variables
+    // This is defense-in-depth: even though scripts should quote variables,
+    // we prevent passing potentially malicious data
+    let mut rejected_vars = Vec::new();
+
     for (key, value) in env_vars {
-        cmd.env(key, value);
+        // Perform context-specific validation
+        let is_safe = match key.as_str() {
+            "LINK" => validation::validate_interface_name(value),
+            "DHCP_HOSTNAME" | "HOSTNAME" => validation::validate_hostname(value),
+            "DHCP_DOMAIN" | "DOMAIN" => validation::validate_domain_name(value),
+            "DHCP_ADDRESS" | "ADDRESSES" => validation::validate_ip_list(value),
+            "DHCP_DNS" | "DNS" => validation::validate_ip_list(value),
+            "DHCP_GATEWAY" => validation::validate_ip_list(value),
+            "STATE" => validation::validate_state_name(value),
+            "LINKINDEX" => value.chars().all(|c| c.is_ascii_digit()),
+            // For other variables, apply general sanitization
+            _ => validation::sanitize_env_value(value).is_some(),
+        };
+
+        if is_safe {
+            cmd.env(key, value);
+        } else {
+            rejected_vars.push((key.clone(), value.clone()));
+        }
+    }
+
+    // Log rejected variables for security monitoring
+    if !rejected_vars.is_empty() {
+        warn!(
+            "Rejected {} environment variables with suspicious content for script {:?}",
+            rejected_vars.len(),
+            script_path
+        );
+        for (key, value) in &rejected_vars {
+            debug!("Rejected: {}={}", key, value);
+        }
     }
 
     // Configure stdio

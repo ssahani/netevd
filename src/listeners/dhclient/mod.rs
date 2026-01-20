@@ -44,26 +44,30 @@ pub async fn watch_lease_file(
     let (tx, mut rx) = mpsc::channel(100);
 
     // Set up file watcher
-    let mut watcher = RecommendedWatcher::new(
-        move |res: Result<Event, notify::Error>| {
-            if let Ok(event) = res {
-                let _ = tx.blocking_send(event);
-            }
-        },
-        NotifyConfig::default(),
-    )
-    .context("Failed to create file watcher")?;
+    // IMPORTANT: Keep watcher alive for entire function lifetime
+    let _watcher = {
+        let mut watcher = RecommendedWatcher::new(
+            move |res: Result<Event, notify::Error>| {
+                if let Ok(event) = res {
+                    let _ = tx.blocking_send(event);
+                }
+            },
+            NotifyConfig::default(),
+        )
+        .context("Failed to create file watcher")?;
 
-    // Watch the parent directory (file might not exist yet)
-    let watch_path = Path::new(DHCLIENT_LEASE_FILE)
-        .parent()
-        .unwrap_or(Path::new("/var/lib/dhclient"));
+        // Watch the parent directory (file might not exist yet)
+        let watch_path = Path::new(DHCLIENT_LEASE_FILE)
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("Invalid lease file path"))?;
 
-    watcher
-        .watch(watch_path, RecursiveMode::NonRecursive)
-        .context("Failed to watch lease file directory")?;
+        watcher
+            .watch(watch_path, RecursiveMode::NonRecursive)
+            .context("Failed to watch lease file directory")?;
 
-    info!("Watching directory: {}", watch_path.display());
+        info!("Watching directory: {}", watch_path.display());
+        watcher
+    };
 
     // Process initial leases if file exists
     if Path::new(DHCLIENT_LEASE_FILE).exists() {

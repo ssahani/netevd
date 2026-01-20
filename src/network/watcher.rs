@@ -178,16 +178,21 @@ async fn configure_network(
 
         // Add "to" rule
         add_routing_rule_to(handle, *address, table).await?;
-
-        // Update state
-        let mut state_write = state.write().await;
-        state_write.add_routing_rule_from(*address, table);
-        state_write.add_routing_rule_to(*address, table);
     }
 
-    // Update route in state
+    // Update state in a single atomic write operation
+    // This prevents race conditions where another watcher could modify state
+    // between individual updates
     {
         let mut state_write = state.write().await;
+
+        // Add all routing rules to state
+        for address in addresses {
+            state_write.add_routing_rule_from(*address, table);
+            state_write.add_routing_rule_to(*address, table);
+        }
+
+        // Add route to state
         state_write.add_route(ifindex, table, Some(gateway));
     }
 

@@ -7,25 +7,43 @@ use caps::{CapSet, Capability};
 use nix::sys::prctl;
 use std::collections::HashSet;
 
-/// Apply necessary capabilities (CAP_NET_ADMIN and CAP_SYS_ADMIN)
-/// This should be called after privilege dropping
+/// Apply necessary capabilities for network operations
+///
+/// Only CAP_NET_ADMIN is needed for:
+/// - Managing routing tables and policy rules
+/// - Configuring network interfaces
+/// - Accessing netlink sockets
+///
+/// NOTE: CAP_SYS_ADMIN has been removed as it's overly broad and provides
+/// unnecessary privileges. CAP_NET_ADMIN is sufficient for all network
+/// configuration operations this daemon performs.
+///
+/// This should be called after privilege dropping.
 pub fn apply_capabilities() -> Result<()> {
-    // Create a set of capabilities we need
+    // Only request CAP_NET_ADMIN - sufficient for all network operations
     let mut capabilities = HashSet::new();
     capabilities.insert(Capability::CAP_NET_ADMIN);
-    capabilities.insert(Capability::CAP_SYS_ADMIN);
 
-    // Set in permitted set
+    // Set in permitted set (capability pool we can draw from)
     caps::set(None, CapSet::Permitted, &capabilities)
         .context("Failed to set capabilities in permitted set")?;
 
-    // Set in effective set
+    // Set in effective set (actually active capabilities)
     caps::set(None, CapSet::Effective, &capabilities)
         .context("Failed to set capabilities in effective set")?;
 
-    // Set in inheritable set
-    caps::set(None, CapSet::Inheritable, &capabilities)
-        .context("Failed to set capabilities in inheritable set")?;
+    // Do NOT set Inheritable - child processes (scripts) should not
+    // inherit network admin capabilities for security
+
+    tracing::info!("Applied capabilities: {:?}", capabilities);
+
+    // Verify the capability was actually acquired
+    let effective = caps::read(None, CapSet::Effective)
+        .context("Failed to read effective capabilities")?;
+
+    if !effective.contains(&Capability::CAP_NET_ADMIN) {
+        anyhow::bail!("Failed to acquire CAP_NET_ADMIN capability");
+    }
 
     Ok(())
 }
