@@ -2,7 +2,7 @@
 
 system:
   log_level: "info"
-  generator: "systemd-networkd"  # Options: systemd-networkd, NetworkManager, dhclient
+  backend: "systemd-networkd"  # Options: systemd-networkd, NetworkManager, dhclient
 
 network:
   links: "eth0 eth1"  # Space-separated list of interfaces to monitor (empty = all)

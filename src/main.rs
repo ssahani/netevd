@@ -36,8 +36,8 @@ async fn main() -> Result<()> {
     // Parse configuration
     let config = Config::parse().context("Failed to parse configuration")?;
     info!(
-        "Configuration loaded: generator={}, log_level={}",
-        config.system.generator, config.system.log_level
+        "Configuration loaded: backend={}, log_level={}",
+        config.system.backend, config.system.log_level
     );
 
     // Update logging level based on config
@@ -111,7 +111,7 @@ async fn main() -> Result<()> {
             warn!("Link watcher exited: {:?}", result);
         }
         result = spawn_listener(config_listener, handle_listener, state_listener) => {
-            warn!("Generator listener exited: {:?}", result);
+            warn!("Backend listener exited: {:?}", result);
         }
     }
 
@@ -146,13 +146,13 @@ fn update_log_level(level: &str) {
     }
 }
 
-/// Spawn the appropriate listener based on the configured generator
+/// Spawn the appropriate listener based on the configured backend
 async fn spawn_listener(
     config: Config,
     handle: Handle,
     state: Arc<RwLock<NetworkState>>,
 ) -> Result<()> {
-    match config.system.generator.as_str() {
+    match config.system.backend.as_str() {
         "systemd-networkd" => {
             info!("Starting systemd-networkd listener");
             listeners::networkd::listen_networkd(config, handle, state).await
@@ -165,6 +165,6 @@ async fn spawn_listener(
             info!("Starting dhclient listener");
             listeners::dhclient::watch_lease_file(config, handle, state).await
         }
-        _ => anyhow::bail!("Unknown generator: {}", config.system.generator),
+        _ => anyhow::bail!("Unknown backend: {}", config.system.backend),
     }
 }

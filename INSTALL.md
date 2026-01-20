@@ -206,8 +206,8 @@ system:
   # Logging level: trace, debug, info, warn, error
   log_level: "info"
 
-  # Network event generator: systemd-networkd, NetworkManager, or dhclient
-  generator: "systemd-networkd"
+  # Network backend: systemd-networkd, NetworkManager, or dhclient
+  backend: "systemd-networkd"
 
 network:
   # Space-separated list of interfaces to monitor (empty = all)

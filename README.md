@@ -59,7 +59,7 @@ Edit `/etc/netevd/netevd.yaml`:
 ```yaml
 system:
   log_level: "info"
-  generator: "systemd-networkd"  # or "NetworkManager" or "dhclient"
+  backend: "systemd-networkd"  # or "NetworkManager" or "dhclient"
 
 network:
   links: "eth0 eth1"  # Interfaces to monitor
@@ -130,7 +130,7 @@ Configure dhclient mode in `/etc/netevd/netevd.yaml`:
 
 ```yaml
 system:
-  generator: "dhclient"
+  backend: "dhclient"
 
 network:
   use_dns: true
@@ -166,7 +166,7 @@ Edit `/etc/netevd/netevd.yaml`:
 
 ```yaml
 system:
-  generator: "systemd-networkd"
+  backend: "systemd-networkd"
 
 network:
   routing_policy_rules: "eth1"  # Configure routing for eth1
@@ -366,7 +366,7 @@ fi
 | Option | Values | Default | Description |
 |--------|--------|---------|-------------|
 | `log_level` | `trace`, `debug`, `info`, `warn`, `error` | `info` | Logging verbosity |
-| `generator` | `systemd-networkd`, `NetworkManager`, `dhclient` | `systemd-networkd` | Network event source |
+| `backend` | `systemd-networkd`, `NetworkManager`, `dhclient` | `systemd-networkd` | Network event source |
 
 #### Network Section
 
@@ -386,7 +386,7 @@ fi
 ```yaml
 system:
   log_level: "info"
-  generator: "NetworkManager"
+  backend: "NetworkManager"
 
 network:
   links: "wlan0"
@@ -399,7 +399,7 @@ network:
 ```yaml
 system:
   log_level: "warn"
-  generator: "systemd-networkd"
+  backend: "systemd-networkd"
 
 network:
   links: "eth0 eth1 eth2"
@@ -412,7 +412,7 @@ network:
 ```yaml
 system:
   log_level: "debug"
-  generator: "dhclient"
+  backend: "dhclient"
 
 network:
   links: "eth0"

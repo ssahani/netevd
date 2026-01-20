@@ -9,7 +9,7 @@ use std::path::Path;
 
 const DEFAULT_CONFIG_PATH: &str = "/etc/netevd/netevd.yaml";
 const DEFAULT_LOG_LEVEL: &str = "info";
-const DEFAULT_GENERATOR: &str = "systemd-networkd";
+const DEFAULT_BACKEND: &str = "systemd-networkd";
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
@@ -26,8 +26,8 @@ pub struct SystemConfig {
     #[serde(default = "default_log_level")]
     pub log_level: String,
 
-    #[serde(default = "default_generator")]
-    pub generator: String,
+    #[serde(default = "default_backend")]
+    pub backend: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -56,7 +56,7 @@ impl Default for SystemConfig {
     fn default() -> Self {
         Self {
             log_level: DEFAULT_LOG_LEVEL.to_string(),
-            generator: DEFAULT_GENERATOR.to_string(),
+            backend: DEFAULT_BACKEND.to_string(),
         }
     }
 }
@@ -89,8 +89,8 @@ fn default_log_level() -> String {
     DEFAULT_LOG_LEVEL.to_string()
 }
 
-fn default_generator() -> String {
-    DEFAULT_GENERATOR.to_string()
+fn default_backend() -> String {
+    DEFAULT_BACKEND.to_string()
 }
 
 fn default_true() -> bool {
@@ -169,7 +169,7 @@ mod tests {
     fn test_default_config() {
         let config = Config::default();
         assert_eq!(config.system.log_level, "info");
-        assert_eq!(config.system.generator, "systemd-networkd");
+        assert_eq!(config.system.backend, "systemd-networkd");
         assert!(config.network.emit_json);
     }
 

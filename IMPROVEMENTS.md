@@ -9,7 +9,7 @@
 
 **Current Issue**:
 ```rust
-// TODO: Add listener tasks (networkd or dhclient) here based on generator type
+// TODO: Add listener tasks (networkd or dhclient) here based on backend type
 ```
 
 **Fix**:
@@ -26,11 +26,11 @@ result = spawn_listener(config_clone, handle_listener, state_listener) => {
 
 // Helper function:
 async fn spawn_listener(config: Config, handle: Handle, state: Arc<RwLock<NetworkState>>) -> Result<()> {
-    match config.system.generator.as_str() {
+    match config.system.backend.as_str() {
         "systemd-networkd" => listeners::networkd::listen_networkd(config, handle, state).await,
         "NetworkManager" => listeners::networkmanager::listen_networkmanager(config, handle, state).await,
         "dhclient" => listeners::dhclient::watch_lease_file(config, handle, state).await,
-        _ => anyhow::bail!("Unknown generator: {}", config.system.generator),
+        _ => anyhow::bail!("Unknown backend: {}", config.system.backend),
     }
 }
 ```
@@ -167,10 +167,10 @@ cargo clippy --fix
 ```rust
 impl Config {
     pub fn validate(&self) -> Result<()> {
-        // Validate generator
-        match self.system.generator.as_str() {
+        // Validate backend
+        match self.system.backend.as_str() {
             "systemd-networkd" | "NetworkManager" | "dhclient" => {},
-            other => anyhow::bail!("Invalid generator: {}", other),
+            other => anyhow::bail!("Invalid backend: {}", other),
         }
         
         // Validate log level
