@@ -155,7 +155,7 @@ async fn handle_device_state_changed(
         env_vars.insert("LINK".to_string(), interface.clone());
         env_vars.insert("LINKINDEX".to_string(), ifindex.to_string());
         env_vars.insert("STATE".to_string(), state_name.clone());
-        env_vars.insert("GENERATOR".to_string(), "NetworkManager".to_string());
+        env_vars.insert("BACKEND".to_string(), "NetworkManager".to_string());
 
         // Add addresses to environment
         if !address_strings.is_empty() {

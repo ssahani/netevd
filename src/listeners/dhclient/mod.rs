@@ -179,7 +179,7 @@ async fn process_lease_file(
         env_vars.insert("LINK".to_string(), interface.clone());
         env_vars.insert("LINKINDEX".to_string(), ifindex.to_string());
         env_vars.insert("STATE".to_string(), "routable".to_string());
-        env_vars.insert("GENERATOR".to_string(), "dhclient".to_string());
+        env_vars.insert("BACKEND".to_string(), "dhclient".to_string());
         env_vars.insert("ADDRESSES".to_string(), lease.address.clone());
 
         // Add DHCP-specific variables

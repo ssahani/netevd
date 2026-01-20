@@ -497,7 +497,7 @@ Create an executable script `/etc/netevd/routable.d/01-notify.sh`:
 # - LINK: Interface name (e.g., "eth0")
 # - LINKINDEX: Interface index number
 # - STATE: Current state ("routable")
-# - GENERATOR: Event source ("systemd-networkd")
+# - BACKEND: Event source ("systemd-networkd")
 # - ADDRESSES: Space-separated list of IP addresses
 # - JSON: Full interface information in JSON format
 
@@ -648,7 +648,7 @@ Create `/etc/netevd/disconnected.d/01-wifi-reconnect.sh`:
 #!/bin/bash
 # Auto-reconnect WiFi when NetworkManager disconnects
 
-if [ "$GENERATOR" = "NetworkManager" ] && [ "$STATE" = "disconnected" ]; then
+if [ "$BACKEND" = "NetworkManager" ] && [ "$STATE" = "disconnected" ]; then
     # Wait a bit
     sleep 5
 
@@ -841,7 +841,7 @@ network:
 - `LINK`: Interface name (e.g., `eth0`)
 - `LINKINDEX`: Interface index number
 - `STATE`: Current state (e.g., `routable`, `activated`, `disconnected`)
-- `GENERATOR`: Source of event (`systemd-networkd`, `NetworkManager`, `dhclient`)
+- `BACKEND`: Source of event (`systemd-networkd`, `NetworkManager`, `dhclient`)
 - `ADDRESSES`: Space-separated list of IP addresses on the interface
 
 #### systemd-networkd Specific
@@ -907,7 +907,7 @@ sudo journalctl -u netevd | grep "Executing"
 
 ```bash
 # Set environment variables and run script
-sudo env LINK=eth0 LINKINDEX=2 STATE=routable GENERATOR=systemd-networkd \
+sudo env LINK=eth0 LINKINDEX=2 STATE=routable BACKEND=systemd-networkd \
      ADDRESSES="192.168.1.100" \
      /etc/netevd/routable.d/01-test.sh
 
