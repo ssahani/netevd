@@ -377,17 +377,17 @@ graph TB
     end
 
     subgraph "netevd Service"
-        BIN[/usr/bin/netevd]
-        CFG[/etc/netevd/netevd.yaml]
-        USR[User: netevd]
-        CAP[Capabilities:<br/>CAP_NET_ADMIN]
+        BIN["Binary: /usr/bin/netevd"]
+        CFG["Config: /etc/netevd/netevd.yaml"]
+        USR["User: netevd"]
+        CAP["Capabilities: CAP_NET_ADMIN"]
     end
 
     subgraph "User Scripts"
-        SC1[/etc/netevd/carrier.d/]
-        SC2[/etc/netevd/routable.d/]
-        SC3[/etc/netevd/routes.d/]
-        SC4[/etc/netevd/activated.d/]
+        SC1["carrier.d/"]
+        SC2["routable.d/"]
+        SC3["routes.d/"]
+        SC4["activated.d/"]
     end
 
     subgraph "System Services"
