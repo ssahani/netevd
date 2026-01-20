@@ -1,0 +1,203 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
+//! DBus signal handling for NetworkManager
+
+use anyhow::{Context, Result};
+use futures::stream::StreamExt;
+use rtnetlink::Handle;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
+use zbus::Connection;
+
+use crate::config::Config;
+use crate::network::{address::get_all_addresses, NetworkState};
+use crate::system::execute;
+use crate::system::paths::get_script_dir;
+
+const NM_SERVICE: &str = "org.freedesktop.NetworkManager";
+const NM_PATH: &str = "/org/freedesktop/NetworkManager";
+
+// NetworkManager device states
+const NM_DEVICE_STATE_UNKNOWN: u32 = 0;
+const NM_DEVICE_STATE_UNMANAGED: u32 = 10;
+const NM_DEVICE_STATE_UNAVAILABLE: u32 = 20;
+const NM_DEVICE_STATE_DISCONNECTED: u32 = 30;
+const NM_DEVICE_STATE_PREPARE: u32 = 40;
+const NM_DEVICE_STATE_CONFIG: u32 = 50;
+const NM_DEVICE_STATE_NEED_AUTH: u32 = 60;
+const NM_DEVICE_STATE_IP_CONFIG: u32 = 70;
+const NM_DEVICE_STATE_IP_CHECK: u32 = 80;
+const NM_DEVICE_STATE_SECONDARIES: u32 = 90;
+const NM_DEVICE_STATE_ACTIVATED: u32 = 100;
+const NM_DEVICE_STATE_DEACTIVATING: u32 = 110;
+const NM_DEVICE_STATE_FAILED: u32 = 120;
+
+/// Start NetworkManager DBus listener
+pub async fn listen_networkmanager(
+    config: Config,
+    handle: Handle,
+    state: Arc<RwLock<NetworkState>>,
+) -> Result<()> {
+    info!("Starting NetworkManager DBus listener");
+
+    let connection = Connection::system()
+        .await
+        .context("Failed to connect to system bus")?;
+
+    // Subscribe to StateChanged signals from NetworkManager
+    let mut stream = zbus::MessageStream::from(&connection);
+
+    // Track last seen state for each device
+    let mut last_states: HashMap<u32, u32> = HashMap::new();
+
+    while let Some(msg) = stream.next().await {
+        if let Ok(msg) = msg {
+            let signal = msg.header();
+            
+            // Look for StateChanged signals
+            if signal.member().map(|m| m.as_str()) == Some("StateChanged") {
+                if let Some(path) = signal.path().map(|p| p.as_str()) {
+                    // Check if this is a device signal: /org/freedesktop/NetworkManager/Devices/{N}
+                    if path.starts_with("/org/freedesktop/NetworkManager/Devices/") {
+                        // Try to extract device information and handle the signal
+                        if let Err(e) = handle_device_state_changed(
+                            &config,
+                            &handle,
+                            &state,
+                            &connection,
+                            path,
+                            &mut last_states,
+                        )
+                        .await
+                        {
+                            warn!("Error handling NetworkManager device signal for path {}: {}", path, e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle device StateChanged signal
+async fn handle_device_state_changed(
+    config: &Config,
+    handle: &Handle,
+    state: &Arc<RwLock<NetworkState>>,
+    connection: &Connection,
+    device_path: &str,
+    last_states: &mut HashMap<u32, u32>,
+) -> Result<()> {
+    // Get device properties via DBus
+    let proxy = zbus::Proxy::new(
+        connection,
+        NM_SERVICE,
+        device_path,
+        "org.freedesktop.NetworkManager.Device",
+    )
+    .await?;
+
+    // Get interface name
+    let interface: String = proxy
+        .get_property("Interface")
+        .await
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    // Get device state
+    let device_state: u32 = proxy
+        .get_property("State")
+        .await
+        .unwrap_or(NM_DEVICE_STATE_UNKNOWN);
+
+    // Get ifindex
+    let ifindex_opt = {
+        let state_read = state.read().await;
+        state_read.get_link_index(&interface)
+    };
+
+    let ifindex = match ifindex_opt {
+        Some(idx) => idx,
+        None => {
+            debug!("Interface {} not found in state, skipping", interface);
+            return Ok(());
+        }
+    };
+
+    // Check if state changed
+    if let Some(last_state) = last_states.get(&ifindex) {
+        if *last_state == device_state {
+            return Ok(());
+        }
+    }
+
+    last_states.insert(ifindex, device_state);
+
+    let state_name = device_state_to_string(device_state);
+    info!(
+        "NetworkManager device {} ({}) state changed to: {}",
+        interface, ifindex, state_name
+    );
+
+    // Get addresses
+    let addresses = get_all_addresses(handle, ifindex)
+        .await
+        .unwrap_or_default();
+    let address_strings: Vec<String> = addresses.iter().map(|a| a.to_string()).collect();
+
+    // Execute scripts for this state
+    let script_dir = get_script_dir(&state_name);
+    if !state_name.is_empty() {
+        let mut env_vars = HashMap::new();
+        env_vars.insert("LINK".to_string(), interface.clone());
+        env_vars.insert("LINKINDEX".to_string(), ifindex.to_string());
+        env_vars.insert("STATE".to_string(), state_name.clone());
+        env_vars.insert("GENERATOR".to_string(), "NetworkManager".to_string());
+
+        // Add addresses to environment
+        if !address_strings.is_empty() {
+            env_vars.insert("ADDRESSES".to_string(), address_strings.join(" "));
+        }
+
+        if let Err(e) = execute::execute_scripts(&script_dir, env_vars).await {
+            warn!("Failed to execute scripts in {}: {}", &script_dir, e);
+        }
+    }
+
+    // Handle routing policy rules for activated state
+    if device_state == NM_DEVICE_STATE_ACTIVATED {
+        let routing_policy_interfaces = config.network.get_routing_policy_interfaces();
+        if routing_policy_interfaces.contains(&interface) {
+            info!(
+                "Interface {} is activated and in routing policy list, routing configuration will be handled by address watcher",
+                interface
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Convert NetworkManager device state to string
+fn device_state_to_string(state: u32) -> String {
+    match state {
+        NM_DEVICE_STATE_UNKNOWN => "unknown",
+        NM_DEVICE_STATE_UNMANAGED => "unmanaged",
+        NM_DEVICE_STATE_UNAVAILABLE => "unavailable",
+        NM_DEVICE_STATE_DISCONNECTED => "disconnected",
+        NM_DEVICE_STATE_PREPARE => "prepare",
+        NM_DEVICE_STATE_CONFIG => "config",
+        NM_DEVICE_STATE_NEED_AUTH => "need_auth",
+        NM_DEVICE_STATE_IP_CONFIG => "ip_config",
+        NM_DEVICE_STATE_IP_CHECK => "ip_check",
+        NM_DEVICE_STATE_SECONDARIES => "secondaries",
+        NM_DEVICE_STATE_ACTIVATED => "activated",
+        NM_DEVICE_STATE_DEACTIVATING => "deactivating",
+        NM_DEVICE_STATE_FAILED => "failed",
+        _ => "unknown",
+    }
+    .to_string()
+}

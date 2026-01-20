@@ -1,0 +1,14 @@
+# Copyright 2022 VMware, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+[Unit]
+Description=A daemon configures network upon events
+Documentation=man:network-broker.conf(5)
+After=network-pre.target
+
+[Service]
+ExecStart=/usr/bin/network-broker
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

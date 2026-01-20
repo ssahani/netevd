@@ -1,0 +1,13 @@
+# netevd configuration file
+
+system:
+  log_level: "info"
+  generator: "systemd-networkd"  # Options: systemd-networkd, NetworkManager, dhclient
+
+network:
+  links: "eth0 eth1"  # Space-separated list of interfaces to monitor (empty = all)
+  routing_policy_rules: "eth0 eth1"  # Interfaces for custom routing tables
+  emit_json: true
+  use_dns: false
+  use_domain: false
+  use_hostname: false
