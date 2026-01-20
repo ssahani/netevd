@@ -2,44 +2,67 @@
 
 [Unit]
 Description=Network Event Daemon
-Documentation=man:netevd(8)
-After=network-pre.target systemd-networkd.service
+Documentation=https://github.com/ssahani/netevd
+After=network-pre.target
+Before=network.target
+# Start after systemd-networkd if present
+After=systemd-networkd.service
+# Start after NetworkManager if present
+After=NetworkManager.service
 Wants=network.target
 
 [Service]
-Type=notify
+Type=simple
 ExecStart=/usr/bin/netevd
 Restart=on-failure
 RestartSec=5s
+TimeoutStartSec=30s
+TimeoutStopSec=30s
 
-# Security settings
+# Run as unprivileged user
 User=netevd
 Group=netevd
 
-# Capabilities needed for network configuration
-# Only CAP_NET_ADMIN is required for routing tables and netlink operations
+# Capabilities
+# CAP_NET_ADMIN: Required for netlink operations, routing tables, and policy rules
 AmbientCapabilities=CAP_NET_ADMIN
 CapabilityBoundingSet=CAP_NET_ADMIN
 
-# Hardening
+# Security Hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/etc/netevd
+ReadOnlyPaths=/etc/netevd
 ProtectKernelTunables=true
 ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectClock=true
 ProtectControlGroups=true
+ProtectProc=invisible
+ProcSubset=pid
 RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
 RestrictNamespaces=true
-LockPersonality=true
-MemoryDenyWriteExecute=true
 RestrictRealtime=true
 RestrictSUIDSGID=true
 RemoveIPC=true
-SystemCallFilter=@system-service
-SystemCallFilter=~@privileged @resources
+LockPersonality=true
+PrivateDevices=false
+
+# Memory protection
+# Note: MemoryDenyWriteExecute disabled for Rust async runtime compatibility
+# MemoryDenyWriteExecute=true
+
+# System call filtering
+# Allow basic system operations + network/DBus
+SystemCallFilter=@system-service @network-io @io-event @signal @process
+SystemCallFilter=~@privileged @clock @module @raw-io @reboot @swap @cpu-emulation @obsolete @debug
 SystemCallErrorNumber=EPERM
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=netevd
 
 [Install]
 WantedBy=multi-user.target
