@@ -1,9 +1,0 @@
-[System]
-LogLevel="info"
-LogFormat="text"
-Generator="systemd-networkd"
-
-[Network]
-Links="eth0 eth1"
-RoutingPolicyRules="eth0 eth1"
-EmitJSON=true
