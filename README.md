@@ -10,6 +10,7 @@ A high-performance network event daemon written in Rust that configures network 
 
 ## ✨ Features
 
+### Core Features
 - 🚀 **Async/Await Architecture**: Built on tokio for efficient event handling
 - 🔌 **Multiple Network Managers**: Supports systemd-networkd, NetworkManager, and dhclient
 - 🛣️ **Routing Policy Rules**: Automatically configures multi-interface routing with custom routing tables
@@ -18,6 +19,28 @@ A high-performance network event daemon written in Rust that configures network 
 - ⚡ **Real-time Monitoring**: Sub-100ms event latency via netlink multicast
 - 🎯 **Input Validation**: Defense-in-depth against command injection
 - 🔄 **Atomic State Updates**: Race-free network state management
+
+### New in v0.2.0 🎉
+
+#### Developer Tools
+- 🖥️ **Enhanced CLI**: Comprehensive command-line interface with `status`, `list`, `show`, `events`, `reload`, `validate`, and `test` commands
+- ✅ **Config Validation**: Built-in YAML configuration validation tool
+- 🧪 **Dry-run Mode**: Test configuration changes safely without applying them
+- 📊 **Multiple Output Formats**: JSON, YAML, and table formats for all commands
+
+#### Enterprise Features
+- 🌐 **REST API**: Full-featured HTTP API built with Axum framework (9 endpoints)
+- 🔍 **Event Filtering**: Advanced event filtering with pattern matching and conditional expressions
+- 📈 **Prometheus Metrics**: 15+ metrics across 6 categories for comprehensive monitoring
+- 📝 **Audit Logging**: Structured JSON audit logs for compliance and debugging
+- 🌍 **IPv6 Support**: Policy routing for IPv6 with RFC 6724 address selection
+- 🎨 **Web Dashboard**: Real-time monitoring interface with auto-refresh
+
+#### Cloud & Kubernetes
+- ☸️ **Kubernetes Operator**: Custom Resource Definitions and DaemonSet deployment
+- 🐳 **Docker Images**: Debian (~150MB) and Alpine (~50MB) container images
+- ☁️ **Cloud Provider Integration**: AWS EC2, Azure, and GCP API integrations
+- 📦 **Multiple Distribution Formats**: Available on crates.io, with RPM, DEB, and AUR packages
 
 ## 📊 Architecture Overview
 
