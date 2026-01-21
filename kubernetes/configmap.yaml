@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: netevd-config
+  namespace: kube-system
+  labels:
+    app: netevd
+data:
+  netevd.yaml: |
+    system:
+      log_level: "info"
+      backend: "systemd-networkd"
+
+    network:
+      links: ""  # Monitor all interfaces
+      routing_policy_rules: ""
+      emit_json: true
+      use_dns: false
+      use_domain: false
+      use_hostname: false
+
+    api:
+      enabled: true
+      port: 9090
+      address: "0.0.0.0"
+
+    metrics:
+      enabled: true
+
+    audit:
+      enabled: true
+      log_path: "/var/log/netevd/audit.log"
+
+    filters:
+      - match_rule:
+          interface_pattern: "eth*"
+          event_type: "routable"
+        action: execute
+        scripts:
+          - /etc/netevd/scripts/routable.d/01-k8s-notify.sh
+
+      - match_rule:
+          interface_pattern: "cni*"
+        action: ignore
+
+      - match_rule:
+          interface_pattern: "docker*"
+        action: ignore
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: netevd-scripts
+  namespace: kube-system
+  labels:
+    app: netevd
+data:
+  01-k8s-notify.sh: |
+    #!/bin/bash
+    # Kubernetes notification script
+
+    echo "Network event on $LINK: $STATE"
+    logger -t netevd-k8s "Interface $LINK is now $STATE with IP $ADDRESSES"
+
+    # Could send to Kubernetes event API here
+    # kubectl create event ...

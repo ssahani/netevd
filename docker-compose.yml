@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  netevd:
+    build: .
+    image: netevd:latest
+    container_name: netevd
+    restart: unless-stopped
+
+    # Network configuration
+    network_mode: host  # Required for network management
+
+    # Capabilities
+    cap_add:
+      - NET_ADMIN      # Required for network configuration
+      - NET_RAW        # Required for raw sockets
+
+    # Volumes
+    volumes:
+      - ./config/netevd.yaml:/etc/netevd/netevd.yaml:ro
+      - ./scripts:/etc/netevd:ro
+      - netevd-logs:/var/log/netevd
+
+    # Environment variables
+    environment:
+      - RUST_LOG=info
+      - NETEVD_BACKEND=systemd-networkd
+
+    # Ports (when not using host network)
+    # ports:
+    #   - "9090:9090"  # API server
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "/usr/bin/netevd", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: netevd-prometheus
+    restart: unless-stopped
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    depends_on:
+      - netevd
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: netevd-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+
+volumes:
+  netevd-logs:
+  prometheus-data:
+  grafana-data:

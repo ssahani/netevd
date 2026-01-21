@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: netevd
+  namespace: kube-system
+  labels:
+    app: netevd
+    version: v0.1.0
+spec:
+  selector:
+    matchLabels:
+      app: netevd
+  template:
+    metadata:
+      labels:
+        app: netevd
+        version: v0.1.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      hostNetwork: true
+      hostPID: false
+      serviceAccountName: netevd
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: netevd
+        image: netevd:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: false  # Must start as root, then drops privileges
+          runAsUser: 0
+          readOnlyRootFilesystem: false
+        env:
+        - name: RUST_LOG
+          value: "info"
+        - name: NETEVD_BACKEND
+          value: "systemd-networkd"
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        ports:
+        - containerPort: 9090
+          name: api
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: config
+          mountPath: /etc/netevd
+          readOnly: true
+        - name: scripts
+          mountPath: /etc/netevd/scripts
+          readOnly: true
+        - name: run-systemd
+          mountPath: /run/systemd
+          readOnly: true
+        - name: dbus
+          mountPath: /var/run/dbus
+          readOnly: false
+        - name: logs
+          mountPath: /var/log/netevd
+      volumes:
+      - name: config
+        configMap:
+          name: netevd-config
+      - name: scripts
+        configMap:
+          name: netevd-scripts
+          defaultMode: 0755
+      - name: run-systemd
+        hostPath:
+          path: /run/systemd
+          type: Directory
+      - name: dbus
+        hostPath:
+          path: /var/run/dbus
+          type: Directory
+      - name: logs
+        hostPath:
+          path: /var/log/netevd
+          type: DirectoryOrCreate

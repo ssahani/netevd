@@ -9,3 +9,11 @@ pub mod network;
 pub mod system;
 pub mod bus;
 pub mod listeners;
+
+// New modules for enhanced functionality
+pub mod api;
+pub mod audit;
+pub mod cli;
+pub mod cloud;
+pub mod filters;
+pub mod metrics;

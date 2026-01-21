@@ -1,0 +1,119 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: networkpolicies.netevd.io
+spec:
+  group: netevd.io
+  names:
+    kind: NetworkPolicy
+    listKind: NetworkPolicyList
+    plural: networkpolicies
+    singular: networkpolicy
+    shortNames:
+    - netpol
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              selector:
+                type: object
+                properties:
+                  interfacePattern:
+                    type: string
+                  nodeSelector:
+                    type: object
+                    additionalProperties:
+                      type: string
+              rules:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    eventType:
+                      type: string
+                      enum:
+                        - routable
+                        - carrier
+                        - configured
+                        - degraded
+                    action:
+                      type: string
+                      enum:
+                        - execute
+                        - ignore
+                        - log
+                    scripts:
+                      type: array
+                      items:
+                        type: string
+                    routingPolicy:
+                      type: object
+                      properties:
+                        enabled:
+                          type: boolean
+                        tableId:
+                          type: integer
+                        priority:
+                          type: integer
+          status:
+            type: object
+            properties:
+              conditions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    status:
+                      type: string
+                    lastUpdateTime:
+                      type: string
+                      format: date-time
+                    reason:
+                      type: string
+                    message:
+                      type: string
+              appliedNodes:
+                type: array
+                items:
+                  type: string
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Applied Nodes
+      type: integer
+      jsonPath: .status.appliedNodes
+      description: Number of nodes where policy is applied
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp
+
+---
+apiVersion: netevd.io/v1alpha1
+kind: NetworkPolicy
+metadata:
+  name: example-routing-policy
+  namespace: default
+spec:
+  selector:
+    interfacePattern: "eth*"
+    nodeSelector:
+      role: worker
+  rules:
+  - eventType: routable
+    action: execute
+    scripts:
+      - /etc/netevd/scripts/notify.sh
+    routingPolicy:
+      enabled: true
+      tableId: 200
+      priority: 32765

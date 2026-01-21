@@ -1,6 +1,6 @@
 [package]
 name = "netevd"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Susant Sahani <ssahani@redhat.com>"]
 license = "LGPL-3.0-or-later"
@@ -47,6 +47,23 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
 
+# CLI
+clap = { version = "4.5", features = ["derive", "cargo", "env"] }
+
+# HTTP/API Server
+axum = { version = "0.7", features = ["ws", "macros"] }
+tower = { version = "0.5", features = ["util", "timeout", "limit"] }
+tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
+hyper = { version = "1.0", features = ["full"] }
+
+# Metrics
+prometheus = { version = "0.13", features = ["process"] }
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+regex = "1.10"
+
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
@@ -56,7 +73,7 @@ notify = { version = "6.1", features = ["serde"] }
 
 # System/Security
 caps = "0.5"
-nix = { version = "0.29", features = ["user", "process"] }
+nix = { version = "0.29", features = ["user", "process", "signal"] }
 libc = "0.2"
 
 # Parsing
@@ -69,6 +86,10 @@ thiserror = "1.0"
 
 # Network types
 ipnetwork = "0.20"
+
+# Optional features
+signal-hook = "0.3"
+signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 
 [dev-dependencies]
 tempfile = "3.8"
