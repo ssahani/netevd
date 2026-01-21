@@ -1,0 +1,18 @@
+pkgbase = netevd
+	pkgdesc = Network event daemon for systemd-networkd and NetworkManager
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/ssahani/netevd
+	arch = x86_64
+	arch = aarch64
+	arch = armv7h
+	license = LGPL-3.0-or-later
+	makedepends = rust
+	makedepends = cargo
+	depends = systemd
+	depends = gcc-libs
+	backup = etc/netevd/netevd.yaml
+	source = netevd-0.1.0.tar.gz::https://github.com/ssahani/netevd/archive/v0.1.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = netevd

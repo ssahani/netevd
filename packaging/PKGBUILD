@@ -1,0 +1,75 @@
+# Maintainer: Susant Sahani <ssahani@redhat.com>
+
+pkgname=netevd
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Network event daemon for systemd-networkd and NetworkManager"
+arch=('x86_64' 'aarch64' 'armv7h')
+url="https://github.com/ssahani/netevd"
+license=('LGPL-3.0-or-later')
+depends=('systemd' 'gcc-libs')
+makedepends=('rust' 'cargo')
+backup=('etc/netevd/netevd.yaml')
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
+sha256sums=('SKIP')  # Update with actual checksum
+
+build() {
+    cd "${pkgname}-${pkgver}"
+    cargo build --release --locked
+}
+
+check() {
+    cd "${pkgname}-${pkgver}"
+    cargo test --release --locked
+}
+
+package() {
+    cd "${pkgname}-${pkgver}"
+
+    # Install binary
+    install -Dm755 "target/release/${pkgname}" "${pkgdir}/usr/bin/${pkgname}"
+
+    # Install systemd service
+    install -Dm644 "systemd/${pkgname}.service" "${pkgdir}/usr/lib/systemd/system/${pkgname}.service"
+
+    # Install default configuration
+    install -Dm644 "examples/${pkgname}.yaml" "${pkgdir}/etc/${pkgname}/${pkgname}.yaml"
+
+    # Create script directories
+    install -dm755 "${pkgdir}/etc/${pkgname}/carrier.d"
+    install -dm755 "${pkgdir}/etc/${pkgname}/no-carrier.d"
+    install -dm755 "${pkgdir}/etc/${pkgname}/configured.d"
+    install -dm755 "${pkgdir}/etc/${pkgname}/degraded.d"
+    install -dm755 "${pkgdir}/etc/${pkgname}/routable.d"
+    install -dm755 "${pkgdir}/etc/${pkgname}/activated.d"
+    install -dm755 "${pkgdir}/etc/${pkgname}/disconnected.d"
+    install -dm755 "${pkgdir}/etc/${pkgname}/manager.d"
+    install -dm755 "${pkgdir}/etc/${pkgname}/routes.d"
+
+    # Install documentation
+    install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+    install -Dm644 INSTALL.md "${pkgdir}/usr/share/doc/${pkgname}/INSTALL.md"
+    install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
+
+post_install() {
+    # Create netevd user
+    if ! getent passwd netevd > /dev/null; then
+        useradd --system --no-create-home --shell /usr/bin/nologin netevd
+    fi
+
+    echo "==> To start netevd, run:"
+    echo "    systemctl enable --now netevd.service"
+    echo ""
+    echo "==> Configure /etc/netevd/netevd.yaml and add scripts to /etc/netevd/*.d/"
+}
+
+post_upgrade() {
+    echo "==> Restart netevd to apply changes:"
+    echo "    systemctl restart netevd.service"
+}
+
+pre_remove() {
+    systemctl stop netevd.service 2>/dev/null || true
+    systemctl disable netevd.service 2>/dev/null || true
+}

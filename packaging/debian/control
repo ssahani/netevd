@@ -1,0 +1,32 @@
+Source: netevd
+Section: net
+Priority: optional
+Maintainer: Susant Sahani <ssahani@redhat.com>
+Build-Depends: debhelper-compat (= 13),
+               cargo (>= 1.70),
+               rustc (>= 1.70),
+               dh-cargo,
+               librust-tokio-1+full-dev,
+               librust-zbus-4+tokio-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/ssahani/netevd
+Vcs-Git: https://github.com/ssahani/netevd.git
+Vcs-Browser: https://github.com/ssahani/netevd
+Rules-Requires-Root: no
+
+Package: netevd
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, systemd, adduser
+Description: Network event daemon for systemd-networkd and NetworkManager
+ netevd is a high-performance network event daemon written in Rust that
+ configures network interfaces and executes scripts on network events from
+ systemd-networkd, NetworkManager DBus signals, or when dhclient gains a lease.
+ .
+ Features:
+  * Async/Await architecture built on tokio for efficient event handling
+  * Multiple network manager support (systemd-networkd, NetworkManager, dhclient)
+  * Routing policy rules for multi-interface setups
+  * Script execution on network state changes
+  * Runs as unprivileged user with minimal capabilities (CAP_NET_ADMIN only)
+  * Real-time monitoring with sub-100ms event latency via netlink
+  * Input validation with defense-in-depth against command injection

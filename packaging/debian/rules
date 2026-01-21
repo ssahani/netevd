@@ -1,0 +1,36 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh $@ --buildsystem=cargo
+
+override_dh_auto_build:
+	cargo build --release --locked
+
+override_dh_auto_install:
+	# Install binary
+	install -Dm755 target/release/netevd debian/netevd/usr/bin/netevd
+
+	# Install systemd service
+	install -Dm644 systemd/netevd.service debian/netevd/lib/systemd/system/netevd.service
+
+	# Install default configuration
+	install -Dm644 examples/netevd.yaml debian/netevd/etc/netevd/netevd.yaml
+
+	# Create script directories
+	install -dm755 debian/netevd/etc/netevd/carrier.d
+	install -dm755 debian/netevd/etc/netevd/no-carrier.d
+	install -dm755 debian/netevd/etc/netevd/configured.d
+	install -dm755 debian/netevd/etc/netevd/degraded.d
+	install -dm755 debian/netevd/etc/netevd/routable.d
+	install -dm755 debian/netevd/etc/netevd/activated.d
+	install -dm755 debian/netevd/etc/netevd/disconnected.d
+	install -dm755 debian/netevd/etc/netevd/manager.d
+	install -dm755 debian/netevd/etc/netevd/routes.d
+
+override_dh_auto_test:
+	cargo test --release --locked
+
+override_dh_auto_clean:
+	cargo clean

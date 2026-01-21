@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # Create netevd user if it doesn't exist
+        if ! getent passwd netevd > /dev/null; then
+            adduser --system --group --no-create-home \
+                    --home /nonexistent --shell /usr/sbin/nologin \
+                    --gecos "Network Event Daemon" netevd
+        fi
+
+        # Reload systemd
+        if [ -d /run/systemd/system ]; then
+            systemctl --system daemon-reload >/dev/null || true
+            deb-systemd-helper enable netevd.service >/dev/null || true
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

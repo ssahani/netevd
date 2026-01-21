@@ -4,11 +4,19 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Susant Sahani <ssahani@redhat.com>"]
 license = "LGPL-3.0-or-later"
-description = "Network event daemon for systemd-networkd and dhclient integration"
+description = "High-performance network event daemon for systemd-networkd, NetworkManager, and dhclient with routing policy rules and script execution"
 repository = "https://github.com/ssahani/netevd"
+homepage = "https://github.com/ssahani/netevd"
+documentation = "https://github.com/ssahani/netevd/blob/main/README.md"
 readme = "README.md"
 keywords = ["networking", "systemd", "dhclient", "netlink", "dbus"]
 categories = ["network-programming", "os::linux-apis"]
+exclude = [
+    "packaging/*",
+    ".github/*",
+    "tests/*",
+    "examples/*.sh",
+]
 
 [[bin]]
 name = "netevd"
