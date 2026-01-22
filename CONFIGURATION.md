@@ -25,13 +25,25 @@ system:
   log_level: "info"
   backend: "systemd-networkd"
 
-network:
-  links: "eth0 eth1"
-  routing_policy_rules: "eth1"
-  emit_json: true
-  use_dns: false
-  use_domain: false
-  use_hostname: false
+monitoring:
+  interfaces:
+    - eth0
+    - eth1
+
+routing:
+  policy_rules:
+    - eth1
+
+backends:
+  systemd_networkd:
+    emit_json: true
+
+  dhclient:
+    use_dns: false
+    use_domain: false
+    use_hostname: false
+
+  networkmanager: {}
 ```
 
 ### Configuration Validation
@@ -94,54 +106,66 @@ system:
 | `NetworkManager` | Desktops, laptops | Full-featured, GUI integration | Heavier |
 | `dhclient` | Legacy systems | Widely compatible | Limited features |
 
-## Network Section
+## Monitoring Section
 
-Controls network monitoring and routing behavior.
+Controls which network interfaces to monitor.
 
-### links
+### interfaces
 
-**Type:** String (space-separated)
-**Default:** All interfaces
-**Format:** Space-separated interface names
+**Type:** Array of strings
+**Default:** Empty (monitor all interfaces)
+**Format:** YAML array
 
 Specifies which interfaces to monitor.
 
 ```yaml
-network:
-  links: "eth0 eth1 wlan0"
+monitoring:
+  interfaces:
+    - eth0
+    - eth1
+    - wlan0
 ```
 
 **Special values:**
-- Empty string `""`: Monitor all interfaces
-- Single interface: `"eth0"`
-- Multiple: `"eth0 eth1 eth2"`
+- Empty array `[]`: Monitor all interfaces
+- Single interface: List with one item
+- Multiple: List with multiple items
 
 **Examples:**
 ```yaml
 # Monitor all interfaces
-network:
-  links: ""
+monitoring:
+  interfaces: []
 
 # Monitor only specific interfaces
-network:
-  links: "eth0 eth1"
+monitoring:
+  interfaces:
+    - eth0
+    - eth1
 
 # Monitor wireless only
-network:
-  links: "wlan0"
+monitoring:
+  interfaces:
+    - wlan0
 ```
 
-### routing_policy_rules
+## Routing Section
 
-**Type:** String (space-separated)
+Controls routing policy rule creation.
+
+### policy_rules
+
+**Type:** Array of strings
 **Default:** Empty (disabled)
-**Format:** Space-separated interface names
+**Format:** YAML array of interface names
 
 Enables automatic routing policy rule creation for specified interfaces.
 
 ```yaml
-network:
-  routing_policy_rules: "eth1 eth2"
+routing:
+  policy_rules:
+    - eth1
+    - eth2
 ```
 
 **What it does:**
@@ -162,8 +186,9 @@ For each interface, netevd automatically creates:
 **Example scenario:**
 
 ```yaml
-network:
-  routing_policy_rules: "eth1"
+routing:
+  policy_rules:
+    - eth1
 ```
 
 When eth1 (index 3) gets IP 192.168.1.100:
@@ -175,17 +200,25 @@ ip rule add to 192.168.1.100 lookup 203
 ip route add default via 192.168.1.1 dev eth1 table 203
 ```
 
-### emit_json
+## Backends Section
+
+Backend-specific configuration options.
+
+### systemd_networkd
+
+Configuration for systemd-networkd backend.
+
+#### emit_json
 
 **Type:** Boolean
 **Default:** `true`
-**Backend:** systemd-networkd only
 
 Controls whether JSON data is passed to scripts via `$JSON` environment variable.
 
 ```yaml
-network:
-  emit_json: true
+backends:
+  systemd_networkd:
+    emit_json: true
 ```
 
 **When enabled**, scripts receive rich interface data:
@@ -199,50 +232,65 @@ echo "$JSON" | jq '.Address[].IP'
 
 **Performance note:** Disable if you don't need JSON to reduce overhead.
 
-### use_dns
+### dhclient
+
+Configuration for dhclient backend.
+
+#### use_dns
 
 **Type:** Boolean
 **Default:** `false`
-**Backend:** dhclient only
 
 Send DNS servers from DHCP to systemd-resolved.
 
 ```yaml
-network:
-  use_dns: true
+backends:
+  dhclient:
+    use_dns: true
 ```
 
 **Requires:**
 - dhclient backend
 - systemd-resolved running
 
-### use_domain
+#### use_domain
 
 **Type:** Boolean
 **Default:** `false`
-**Backend:** dhclient only
 
 Send domain name from DHCP to systemd-resolved.
 
 ```yaml
-network:
-  use_domain: true
+backends:
+  dhclient:
+    use_domain: true
 ```
 
-### use_hostname
+#### use_hostname
 
 **Type:** Boolean
 **Default:** `false`
-**Backend:** dhclient only
 
 Send hostname from DHCP to systemd-hostnamed.
 
 ```yaml
-network:
-  use_hostname: true
+backends:
+  dhclient:
+    use_hostname: true
 ```
 
 **Warning:** This will change your system hostname based on DHCP response.
+
+### networkmanager
+
+Configuration for NetworkManager backend.
+
+```yaml
+backends:
+  networkmanager: {}
+```
+
+*Currently no specific options. Placeholder for future features.*
 
 ## Script Directories
 
@@ -355,9 +403,16 @@ Configure multiple interfaces with custom routing:
 system:
   backend: "systemd-networkd"
 
-network:
-  links: "eth0 eth1 eth2"
-  routing_policy_rules: "eth1 eth2"  # eth0 is default gateway
+monitoring:
+  interfaces:
+    - eth0
+    - eth1
+    - eth2
+
+routing:
+  policy_rules:  # eth0 is default gateway
+    - eth1
+    - eth2
 ```
 
 **Result:**
@@ -440,10 +495,9 @@ system:
   log_level: "info"
   backend: "NetworkManager"
 
-network:
-  links: "wlan0"
-  routing_policy_rules: ""
-  emit_json: false
+monitoring:
+  interfaces:
+    - wlan0
 ```
 
 ### Example 2: Server with Multiple NICs
@@ -453,10 +507,22 @@ system:
   log_level: "warn"
   backend: "systemd-networkd"
 
-network:
-  links: "eno1 eno2 eno3 eno4"
-  routing_policy_rules: "eno2 eno3 eno4"
-  emit_json: true
+monitoring:
+  interfaces:
+    - eno1
+    - eno2
+    - eno3
+    - eno4
+
+routing:
+  policy_rules:
+    - eno2
+    - eno3
+    - eno4
+
+backends:
+  systemd_networkd:
+    emit_json: true
 ```
 
 ### Example 3: VPN Gateway
@@ -466,10 +532,18 @@ system:
   log_level: "info"
   backend: "systemd-networkd"
 
-network:
-  links: "eth0 wg0"
-  routing_policy_rules: "wg0"
-  emit_json: true
+monitoring:
+  interfaces:
+    - eth0
+    - wg0
+
+routing:
+  policy_rules:
+    - wg0
+
+backends:
+  systemd_networkd:
+    emit_json: true
 ```
 
 With script `/etc/netevd/routable.d/01-vpn-routes.sh`:
@@ -488,11 +562,15 @@ system:
   log_level: "info"
   backend: "dhclient"
 
-network:
-  links: "eth0"
-  use_dns: true
-  use_domain: true
-  use_hostname: false
+monitoring:
+  interfaces:
+    - eth0
+
+backends:
+  dhclient:
+    use_dns: true
+    use_domain: true
+    use_hostname: false
 ```
 
 ### Example 5: High-Availability Setup
@@ -502,10 +580,18 @@ system:
   log_level: "debug"
   backend: "systemd-networkd"
 
-network:
-  links: "eth0 eth1"
-  routing_policy_rules: "eth1"
-  emit_json: true
+monitoring:
+  interfaces:
+    - eth0
+    - eth1
+
+routing:
+  policy_rules:
+    - eth1
+
+backends:
+  systemd_networkd:
+    emit_json: true
 ```
 
 With failover script `/etc/netevd/no-carrier.d/01-failover.sh`:

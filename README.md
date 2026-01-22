@@ -495,13 +495,25 @@ system:
   log_level: "info"
   backend: "systemd-networkd"  # or "NetworkManager" or "dhclient"
 
-network:
-  links: "eth0 eth1"  # Interfaces to monitor
-  routing_policy_rules: "eth1"  # Interfaces needing custom routing
-  emit_json: true
-  use_dns: false
-  use_domain: false
-  use_hostname: false
+monitoring:
+  interfaces:  # Interfaces to monitor
+    - eth0
+    - eth1
+
+routing:
+  policy_rules:  # Interfaces needing custom routing
+    - eth1
+
+backends:
+  systemd_networkd:
+    emit_json: true
+
+  dhclient:
+    use_dns: false
+    use_domain: false
+    use_hostname: false
+
+  networkmanager: {}
 ```
 
 ## Use Cases & Examples
@@ -566,10 +578,11 @@ Configure dhclient mode in `/etc/netevd/netevd.yaml`:
 system:
   backend: "dhclient"
 
-network:
-  use_dns: true
-  use_domain: true
-  use_hostname: true
+backends:
+  dhclient:
+    use_dns: true
+    use_domain: true
+    use_hostname: true
 ```
 
 Create `/etc/netevd/routable.d/01-dhcp-lease.sh`:
@@ -602,8 +615,9 @@ Edit `/etc/netevd/netevd.yaml`:
 system:
   backend: "systemd-networkd"
 
-network:
-  routing_policy_rules: "eth1"  # Configure routing for eth1
+routing:
+  policy_rules:  # Configure routing for eth1
+    - eth1
 ```
 
 #### What happens automatically:
@@ -822,10 +836,9 @@ system:
   log_level: "info"
   backend: "NetworkManager"
 
-network:
-  links: "wlan0"
-  routing_policy_rules: ""
-  emit_json: false
+monitoring:
+  interfaces:
+    - wlan0
 ```
 
 #### Example 2: Server with Multiple NICs
@@ -835,10 +848,20 @@ system:
   log_level: "warn"
   backend: "systemd-networkd"
 
-network:
-  links: "eth0 eth1 eth2"
-  routing_policy_rules: "eth1 eth2"  # eth0 is primary
-  emit_json: true
+monitoring:
+  interfaces:
+    - eth0
+    - eth1
+    - eth2
+
+routing:
+  policy_rules:  # eth0 is primary
+    - eth1
+    - eth2
+
+backends:
+  systemd_networkd:
+    emit_json: true
 ```
 
 #### Example 3: Legacy System with dhclient
@@ -848,11 +871,15 @@ system:
   log_level: "debug"
   backend: "dhclient"
 
-network:
-  links: "eth0"
-  use_dns: true
-  use_domain: true
-  use_hostname: true
+monitoring:
+  interfaces:
+    - eth0
+
+backends:
+  dhclient:
+    use_dns: true
+    use_domain: true
+    use_hostname: true
 ```
 
 ## Advanced Usage

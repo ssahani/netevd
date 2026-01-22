@@ -182,13 +182,24 @@ system:
   log_level: "info"
   backend: "systemd-networkd"  # or "NetworkManager" or "dhclient"
 
-network:
-  links: "eth0 eth1"  # Space-separated list of interfaces to monitor
-  routing_policy_rules: ""  # Interfaces needing custom routing
-  emit_json: true
-  use_dns: false
-  use_domain: false
-  use_hostname: false
+monitoring:
+  interfaces:  # Interfaces to monitor
+    - eth0
+    - eth1
+
+routing:
+  policy_rules: []  # Interfaces needing custom routing (empty for now)
+
+backends:
+  systemd_networkd:
+    emit_json: true
+
+  dhclient:
+    use_dns: false
+    use_domain: false
+    use_hostname: false
+
+  networkmanager: {}
 ```
 
 ### 2. Set Up Scripts (Optional)
@@ -251,10 +262,11 @@ Configure netevd:
 system:
   backend: "dhclient"
 
-network:
-  use_dns: true
-  use_domain: true
-  use_hostname: true
+backends:
+  dhclient:
+    use_dns: true
+    use_domain: true
+    use_hostname: true
 ```
 
 ### 4. Adjust Permissions (if needed)
