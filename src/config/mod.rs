@@ -17,11 +17,17 @@ pub struct Config {
     pub system: SystemConfig,
 
     #[serde(default)]
-    pub network: NetworkConfig,
+    pub monitoring: MonitoringConfig,
+
+    #[serde(default)]
+    pub routing: RoutingConfig,
+
+    #[serde(default)]
+    pub backends: BackendsConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "PascalCase")]
+#[serde(rename_all = "snake_case")]
 pub struct SystemConfig {
     #[serde(default = "default_log_level")]
     pub log_level: String,
@@ -31,17 +37,42 @@ pub struct SystemConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "PascalCase")]
-pub struct NetworkConfig {
+#[serde(rename_all = "snake_case")]
+pub struct MonitoringConfig {
     #[serde(default)]
-    pub links: String,
+    pub interfaces: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct RoutingConfig {
+    #[serde(default)]
+    pub policy_rules: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct BackendsConfig {
+    #[serde(default)]
+    pub systemd_networkd: SystemdNetworkdConfig,
 
     #[serde(default)]
-    pub routing_policy_rules: String,
+    pub dhclient: DhclientConfig,
 
+    #[serde(default)]
+    pub networkmanager: NetworkManagerConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct SystemdNetworkdConfig {
     #[serde(default = "default_true")]
     pub emit_json: bool,
+}
 
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct DhclientConfig {
     #[serde(default)]
     pub use_dns: bool,
 
@@ -50,6 +81,12 @@ pub struct NetworkConfig {
 
     #[serde(default)]
     pub use_hostname: bool,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct NetworkManagerConfig {
+    // Placeholder for future NetworkManager-specific options
 }
 
 impl Default for SystemConfig {
@@ -61,27 +98,65 @@ impl Default for SystemConfig {
     }
 }
 
-impl NetworkConfig {
-    /// Get routing policy rule interfaces as a vector
-    pub fn get_routing_policy_interfaces(&self) -> Vec<String> {
-        self.routing_policy_rules
-            .split_whitespace()
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string())
-            .collect()
+impl Default for MonitoringConfig {
+    fn default() -> Self {
+        Self {
+            interfaces: Vec::new(),
+        }
     }
 }
 
-impl Default for NetworkConfig {
+impl Default for RoutingConfig {
     fn default() -> Self {
         Self {
-            links: String::new(),
-            routing_policy_rules: String::new(),
-            emit_json: true,
+            policy_rules: Vec::new(),
+        }
+    }
+}
+
+impl Default for BackendsConfig {
+    fn default() -> Self {
+        Self {
+            systemd_networkd: SystemdNetworkdConfig::default(),
+            dhclient: DhclientConfig::default(),
+            networkmanager: NetworkManagerConfig::default(),
+        }
+    }
+}
+
+impl Default for SystemdNetworkdConfig {
+    fn default() -> Self {
+        Self { emit_json: true }
+    }
+}
+
+impl Default for DhclientConfig {
+    fn default() -> Self {
+        Self {
             use_dns: false,
             use_domain: false,
             use_hostname: false,
         }
+    }
+}
+
+impl Default for NetworkManagerConfig {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
+impl MonitoringConfig {
+    /// Get interfaces as a vector
+    pub fn get_interfaces(&self) -> Vec<String> {
+        self.interfaces.clone()
+    }
+}
+
+impl RoutingConfig {
+    /// Get routing policy rule interfaces as a vector
+    pub fn get_routing_policy_interfaces(&self) -> Vec<String> {
+        self.policy_rules.clone()
     }
 }
 
@@ -125,18 +200,12 @@ impl Config {
 
     /// Get links as a vector
     pub fn get_links(&self) -> Vec<String> {
-        self.network.links
-            .split_whitespace()
-            .map(String::from)
-            .collect()
+        self.monitoring.interfaces.clone()
     }
 
     /// Get routing policy rule links as a vector
     pub fn get_routing_policy_links(&self) -> Vec<String> {
-        self.network.routing_policy_rules
-            .split_whitespace()
-            .map(String::from)
-            .collect()
+        self.routing.policy_rules.clone()
     }
 
     /// Check if a link should be monitored
@@ -150,13 +219,35 @@ impl Config {
         let policy_links = self.get_routing_policy_links();
         policy_links.contains(&link_name.to_string())
     }
+
+    /// Get emit_json setting
+    pub fn get_emit_json(&self) -> bool {
+        self.backends.systemd_networkd.emit_json
+    }
+
+    /// Get use_dns setting
+    pub fn get_use_dns(&self) -> bool {
+        self.backends.dhclient.use_dns
+    }
+
+    /// Get use_domain setting
+    pub fn get_use_domain(&self) -> bool {
+        self.backends.dhclient.use_domain
+    }
+
+    /// Get use_hostname setting
+    pub fn get_use_hostname(&self) -> bool {
+        self.backends.dhclient.use_hostname
+    }
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
-            network: NetworkConfig::default(),
+            monitoring: MonitoringConfig::default(),
+            routing: RoutingConfig::default(),
+            backends: BackendsConfig::default(),
         }
     }
 }
@@ -170,23 +261,53 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.system.log_level, "info");
         assert_eq!(config.system.backend, "systemd-networkd");
-        assert!(config.network.emit_json);
+        assert!(config.backends.systemd_networkd.emit_json);
     }
 
     #[test]
-    fn test_parse_links() {
-        let mut config = Config::default();
-        config.network.links = "eth0 eth1 wlan0".to_string();
+    fn test_parse_new_config_format() {
+        let yaml = r#"
+system:
+  log_level: "debug"
+  backend: "systemd-networkd"
 
-        let links = config.get_links();
-        assert_eq!(links, vec!["eth0", "eth1", "wlan0"]);
+monitoring:
+  interfaces:
+    - eth0
+    - eth1
+    - wlan0
+
+routing:
+  policy_rules:
+    - eth1
+
+backends:
+  systemd_networkd:
+    emit_json: true
+
+  dhclient:
+    use_dns: true
+    use_domain: false
+    use_hostname: false
+"#;
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.system.log_level, "debug");
+        assert_eq!(config.get_links(), vec!["eth0", "eth1", "wlan0"]);
+        assert_eq!(config.get_routing_policy_links(), vec!["eth1"]);
+        assert!(config.get_emit_json());
+        assert!(config.get_use_dns());
+        assert!(!config.get_use_domain());
     }
 
     #[test]
     fn test_should_monitor_link() {
-        let mut config = Config::default();
-        config.network.links = "eth0 eth1".to_string();
-
+        let yaml = r#"
+monitoring:
+  interfaces:
+    - eth0
+    - eth1
+"#;
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
         assert!(config.should_monitor_link("eth0"));
         assert!(config.should_monitor_link("eth1"));
         assert!(!config.should_monitor_link("wlan0"));
@@ -197,5 +318,31 @@ mod tests {
         let config = Config::default();
         assert!(config.should_monitor_link("eth0"));
         assert!(config.should_monitor_link("wlan0"));
+    }
+
+    #[test]
+    fn test_routing_policy_rules() {
+        let yaml = r#"
+routing:
+  policy_rules:
+    - eth1
+    - eth2
+"#;
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+        assert!(config.should_configure_routing_rules("eth1"));
+        assert!(config.should_configure_routing_rules("eth2"));
+        assert!(!config.should_configure_routing_rules("eth0"));
+    }
+
+    #[test]
+    fn test_minimal_config() {
+        let yaml = r#"
+system:
+  backend: "NetworkManager"
+"#;
+        let config: Config = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.system.backend, "NetworkManager");
+        assert_eq!(config.system.log_level, "info");
+        assert!(config.monitoring.interfaces.is_empty());
     }
 }

@@ -12,17 +12,26 @@ fn test_config_loading() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("netevd.yaml");
 
-    // Valid configuration (note: PascalCase due to serde rename_all)
+    // Valid configuration with new format
     let config_content = r#"
 system:
-  LogLevel: "info"
-  Backend: "systemd-networkd"
+  log_level: "info"
+  backend: "systemd-networkd"
 
-network:
-  UseDns: true
-  UseDomain: true
-  UseHostname: true
-  RoutingPolicyRules: "eth0 eth1"
+monitoring:
+  interfaces:
+    - eth0
+    - eth1
+
+routing:
+  policy_rules:
+    - eth1
+
+backends:
+  dhclient:
+    use_dns: true
+    use_domain: true
+    use_hostname: true
 "#;
 
     fs::write(&config_path, config_content).unwrap();
@@ -34,9 +43,10 @@ network:
     let config = config.unwrap();
     assert_eq!(config.system.backend, "systemd-networkd");
     assert_eq!(config.system.log_level, "info");
-    assert!(config.network.use_dns);
-    let routing_policy = config.network.get_routing_policy_interfaces();
-    assert_eq!(routing_policy.len(), 2);
+    assert!(config.get_use_dns());
+    let routing_policy = config.routing.get_routing_policy_interfaces();
+    assert_eq!(routing_policy.len(), 1);
+    assert_eq!(routing_policy[0], "eth1");
 }
 
 /// Test invalid configuration handling
@@ -48,8 +58,8 @@ fn test_invalid_config() {
     // Invalid YAML
     let config_content = r#"
 system:
-  LogLevel: info
-  Backend: [invalid
+  log_level: info
+  backend: [invalid
 "#;
 
     fs::write(&config_path, config_content).unwrap();
@@ -67,7 +77,7 @@ fn test_default_config() {
     // Minimal configuration
     let config_content = r#"
 system:
-  Backend: "NetworkManager"
+  backend: "NetworkManager"
 "#;
 
     fs::write(&config_path, config_content).unwrap();
@@ -76,9 +86,9 @@ system:
 
     // Check defaults
     assert_eq!(config.system.log_level, "info");
-    assert!(!config.network.use_dns); // Default is false
-    assert!(!config.network.use_domain); // Default is false
-    assert!(!config.network.use_hostname); // Default is false
+    assert!(!config.get_use_dns()); // Default is false
+    assert!(!config.get_use_domain()); // Default is false
+    assert!(!config.get_use_hostname()); // Default is false
 }
 
 /// Test environment variable overrides
@@ -89,8 +99,8 @@ fn test_env_var_override() {
 
     let config_content = r#"
 system:
-  LogLevel: "info"
-  Backend: "systemd-networkd"
+  log_level: "info"
+  backend: "systemd-networkd"
 "#;
 
     fs::write(&config_path, config_content).unwrap();

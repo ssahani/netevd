@@ -166,8 +166,8 @@ fn handle_validate(config_path: &Path) -> Result<()> {
             println!("\nConfiguration summary:");
             println!("  Log level: {}", config.system.log_level);
             println!("  Backend: {}", config.system.backend);
-            println!("  Links: {}", config.network.links);
-            println!("  Routing policy rules: {}", config.network.routing_policy_rules);
+            println!("  Interfaces: {}", config.monitoring.interfaces.join(", "));
+            println!("  Routing policy rules: {}", config.routing.policy_rules.join(", "));
             Ok(())
         }
         Err(e) => {

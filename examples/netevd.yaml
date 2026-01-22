@@ -1,13 +1,26 @@
 # netevd configuration file
+# SPDX-License-Identifier: LGPL-3.0-or-later
 
 system:
-  log_level: "info"
+  log_level: "info"  # Options: trace, debug, info, warn, error
   backend: "systemd-networkd"  # Options: systemd-networkd, NetworkManager, dhclient
 
-network:
-  links: "eth0 eth1"  # Space-separated list of interfaces to monitor (empty = all)
-  routing_policy_rules: "eth0 eth1"  # Interfaces for custom routing tables
-  emit_json: true
-  use_dns: false
-  use_domain: false
-  use_hostname: false
+monitoring:
+  interfaces:  # List of interfaces to monitor (empty = all)
+    - eth0
+    - eth1
+
+routing:
+  policy_rules:  # Interfaces for custom routing tables
+    - eth1
+
+backends:
+  systemd_networkd:
+    emit_json: true  # Emit JSON data to scripts
+
+  dhclient:
+    use_dns: false  # Send DNS to systemd-resolved
+    use_domain: false  # Send domain to systemd-resolved
+    use_hostname: false  # Send hostname to systemd-hostnamed
+
+  networkmanager: {}

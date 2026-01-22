@@ -120,7 +120,7 @@ async fn handle_link_signal(
     let address_strings: Vec<String> = addresses.iter().map(|a| a.to_string()).collect();
 
     // Build JSON if enabled
-    if config.network.emit_json {
+    if config.get_emit_json() {
         match build_link_describe_json(ifindex, link_name.clone(), &link_state, address_strings.clone()) {
             Ok(json) => {
                 debug!("Link describe JSON: {}", json);
@@ -132,20 +132,20 @@ async fn handle_link_signal(
     }
 
     // Handle systemd-resolved integration
-    if config.network.use_dns && !link_state.dns.is_empty() {
+    if config.get_use_dns() && !link_state.dns.is_empty() {
         if let Err(e) = resolved::set_link_dns(ifindex, link_state.dns.clone()).await {
             warn!("Failed to set DNS for interface {}: {}", ifindex, e);
         }
     }
 
-    if config.network.use_domain && !link_state.domains.is_empty() {
+    if config.get_use_domain() && !link_state.domains.is_empty() {
         if let Err(e) = resolved::set_link_domains(ifindex, link_state.domains.clone()).await {
             warn!("Failed to set domains for interface {}: {}", ifindex, e);
         }
     }
 
     // Handle hostname
-    if config.network.use_hostname {
+    if config.get_use_hostname() {
         // Try to extract hostname from domains
         if let Some(hostname) = link_state.domains.first() {
             if let Err(e) = hostnamed::set_static_hostname(hostname).await {
@@ -163,7 +163,7 @@ async fn handle_link_signal(
         env_vars.insert("STATE".to_string(), current_state.clone());
 
         // Add JSON if enabled
-        if config.network.emit_json {
+        if config.get_emit_json() {
             if let Ok(json) = build_link_describe_json(ifindex, link_name.clone(), &link_state, address_strings.clone()) {
                 if let Ok(json_str) = serde_json::to_string(&json) {
                     env_vars.insert("JSON".to_string(), json_str);
@@ -178,7 +178,7 @@ async fn handle_link_signal(
 
     // Handle routing policy rules for routable state
     if is_link_routable(ifindex) {
-        let routing_policy_interfaces = config.network.get_routing_policy_interfaces();
+        let routing_policy_interfaces = config.routing.get_routing_policy_interfaces();
         if routing_policy_interfaces.contains(&link_name) {
             info!(
                 "Interface {} is routable and in routing policy list, configuring routing",

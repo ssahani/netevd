@@ -169,7 +169,7 @@ async fn handle_device_state_changed(
 
     // Handle routing policy rules for activated state
     if device_state == NM_DEVICE_STATE_ACTIVATED {
-        let routing_policy_interfaces = config.network.get_routing_policy_interfaces();
+        let routing_policy_interfaces = config.routing.get_routing_policy_interfaces();
         if routing_policy_interfaces.contains(&interface) {
             info!(
                 "Interface {} is activated and in routing policy list, routing configuration will be handled by address watcher",

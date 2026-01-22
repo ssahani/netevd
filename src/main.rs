@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
     info!("Initial network links acquired");
 
     // Get routing policy interfaces from config
-    let routing_policy_interfaces = config.network.get_routing_policy_interfaces();
+    let routing_policy_interfaces = config.routing.get_routing_policy_interfaces();
 
     // Clone handles for async tasks
     let state_addr = state.clone();

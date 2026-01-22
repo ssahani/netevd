@@ -142,7 +142,7 @@ async fn process_lease_file(
         };
 
         // Send DNS to systemd-resolved if configured
-        if config.network.use_dns && !lease.dns_servers.is_empty() {
+        if config.get_use_dns() && !lease.dns_servers.is_empty() {
             if let Err(e) = resolved::set_link_dns(ifindex, lease.dns_servers.clone()).await {
                 warn!("Failed to set DNS for {}: {}", interface, e);
             } else {
@@ -151,7 +151,7 @@ async fn process_lease_file(
         }
 
         // Send domain to systemd-resolved if configured
-        if config.network.use_domain {
+        if config.get_use_domain() {
             if let Some(domain) = &lease.domain_name {
                 let domains = vec![domain.clone()];
                 if let Err(e) = resolved::set_link_domains(ifindex, domains).await {
@@ -163,7 +163,7 @@ async fn process_lease_file(
         }
 
         // Send hostname to systemd-hostnamed if configured
-        if config.network.use_hostname {
+        if config.get_use_hostname() {
             if let Some(hostname) = &lease.hostname {
                 if let Err(e) = hostnamed::set_static_hostname(hostname).await {
                     warn!("Failed to set hostname: {}", e);
@@ -211,7 +211,7 @@ async fn process_lease_file(
         }
 
         // Handle routing policy rules if configured
-        let routing_policy_interfaces = config.network.get_routing_policy_interfaces();
+        let routing_policy_interfaces = config.routing.get_routing_policy_interfaces();
         if routing_policy_interfaces.contains(interface) {
             info!(
                 "Interface {} is in routing policy list, routing configuration will be handled by address watcher",

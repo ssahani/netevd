@@ -11,13 +11,22 @@ data:
       log_level: "info"
       backend: "systemd-networkd"
 
-    network:
-      links: ""  # Monitor all interfaces
-      routing_policy_rules: ""
-      emit_json: true
-      use_dns: false
-      use_domain: false
-      use_hostname: false
+    monitoring:
+      interfaces: []  # Monitor all interfaces (empty list)
+
+    routing:
+      policy_rules: []  # No custom routing rules
+
+    backends:
+      systemd_networkd:
+        emit_json: true
+
+      dhclient:
+        use_dns: false
+        use_domain: false
+        use_hostname: false
+
+      networkmanager: {}
 
     api:
       enabled: true
