@@ -1,6 +1,9 @@
 # netevd - Network Event Daemon
 
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![CI](https://github.com/ssahani/netevd/actions/workflows/ci.yml/badge.svg)](https://github.com/ssahani/netevd/actions/workflows/ci.yml)
+[![Functional Tests](https://github.com/ssahani/netevd/actions/workflows/functional-tests.yml/badge.svg)](https://github.com/ssahani/netevd/actions/workflows/functional-tests.yml)
+[![codecov](https://codecov.io/gh/ssahani/netevd/branch/main/graph/badge.svg)](https://codecov.io/gh/ssahani/netevd)
 
 A high-performance network event daemon written in Rust that configures network interfaces and executes scripts on network events from systemd-networkd, NetworkManager DBus signals, or when dhclient gains a lease. It also monitors:
 

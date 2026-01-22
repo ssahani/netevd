@@ -1,0 +1,44 @@
+name: Functional Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  functional-tests:
+    name: Functional Tests (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config iproute2
+
+      - name: Build functional tests
+        run: cargo test --test functional_test --no-run
+
+      - name: Run functional tests with sudo
+        run: |
+          TEST_BINARY=$(find target/debug/deps -name "functional_test-*" -type f -executable | head -1)
+          sudo $TEST_BINARY --test-threads=1 --ignored
+
+      - name: Verify cleanup
+        run: |
+          # Check that no test interfaces remain
+          if ip link show | grep -E "(dummy-test|veth-test|br-test|macvlan-test|dummy-many|dummy-conc)"; then
+            echo "ERROR: Test interfaces not cleaned up properly"
+            exit 1
+          else
+            echo "SUCCESS: All test interfaces cleaned up"
+          fi
