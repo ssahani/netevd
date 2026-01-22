@@ -1,0 +1,106 @@
+name: Cross Platform
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly on Sundays
+    - cron: '0 0 * * 0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  distro-tests:
+    name: Test on ${{ matrix.distro }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - ubuntu:22.04
+          - ubuntu:24.04
+          - debian:bookworm
+          - debian:trixie
+          - fedora:39
+          - fedora:40
+          - archlinux:latest
+
+    container:
+      image: ${{ matrix.distro }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Debian/Ubuntu)
+        if: startsWith(matrix.distro, 'ubuntu') || startsWith(matrix.distro, 'debian')
+        run: |
+          apt-get update
+          apt-get install -y curl build-essential pkg-config libdbus-1-dev
+
+      - name: Install dependencies (Fedora)
+        if: startsWith(matrix.distro, 'fedora')
+        run: |
+          dnf install -y gcc make pkgconfig dbus-devel curl
+
+      - name: Install dependencies (Arch)
+        if: startsWith(matrix.distro, 'archlinux')
+        run: |
+          pacman -Syu --noconfirm base-devel dbus curl
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Build
+        run: |
+          . $HOME/.cargo/env
+          cargo build --release
+
+      - name: Run tests
+        run: |
+          . $HOME/.cargo/env
+          cargo test
+
+  msrv:
+    name: Minimum Supported Rust Version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.70
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.70"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - name: Check MSRV
+        run: cargo check --all-features
+
+  nightly:
+    name: Nightly Rust
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust Nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - name: Build with nightly
+        run: cargo build --all-features
+
+      - name: Run tests with nightly
+        run: cargo test --all-features

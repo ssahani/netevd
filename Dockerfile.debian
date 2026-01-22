@@ -1,16 +1,17 @@
-# Alpine-based Docker image for netevd
-# Smaller size, minimal footprint
+# Debian-based Docker image for netevd
+# Larger size but better compatibility
 
 # Build stage
-FROM rust:1.70-alpine as builder
+FROM rust:1.70-bookworm as builder
 
 WORKDIR /build
 
-# Install build dependencies
-RUN apk add --no-cache \
-    musl-dev \
-    dbus-dev \
-    pkgconfig
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    libdbus-1-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy manifests
 COPY Cargo.toml Cargo.lock ./
@@ -19,24 +20,26 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY examples ./examples
 
-# Build static binary
-ENV RUSTFLAGS="-C target-feature=+crt-static"
-RUN cargo build --release --target x86_64-unknown-linux-musl
+# Build release binary
+RUN cargo build --release
 
 # Runtime stage
-FROM alpine:latest
+FROM debian:bookworm-slim
 
-# Install minimal runtime dependencies
-RUN apk add --no-cache \
-    dbus \
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    libdbus-1-3 \
     iproute2 \
-    ca-certificates
+    systemd \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create netevd user
-RUN adduser -D -H -s /sbin/nologin netevd
+RUN useradd -r -M -s /usr/sbin/nologin -d /nonexistent netevd
 
 # Copy binary from builder
-COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/netevd /usr/bin/netevd
+COPY --from=builder /build/target/release/netevd /usr/bin/netevd
 
 # Copy configuration
 COPY examples/netevd.yaml /etc/netevd/netevd.yaml
@@ -44,10 +47,10 @@ COPY examples/netevd.yaml /etc/netevd/netevd.yaml
 # Create script directories
 RUN mkdir -p /etc/netevd/{carrier.d,no-carrier.d,configured.d,degraded.d,routable.d,activated.d,disconnected.d,manager.d,routes.d}
 
-# Set capabilities
+# Set capabilities (if supported by runtime)
 RUN setcap cap_net_admin+eip /usr/bin/netevd || true
 
-# Don't run as root
+# Don't run as root in production
 USER netevd
 
 # Health check

@@ -183,3 +183,141 @@ Dependabot automatically creates PRs for:
 1. Delete the workflow file
 2. Remove badges from README.md
 3. Update this documentation
+
+### Documentation Workflow (`workflows/docs.yml`)
+
+Builds and deploys documentation to GitHub Pages.
+
+**Jobs:**
+- **Docs**: Builds rustdoc with strict warnings
+  - Deploys to GitHub Pages on main branch
+- **Spelling**: Checks spelling with typos
+- **Links**: Verifies all links in markdown and source files
+
+**Triggers:** Push to main, Pull requests
+
+**Output:** https://ssahani.github.io/netevd/
+
+### Security Workflow (`workflows/security.yml`)
+
+Comprehensive security scanning.
+
+**Jobs:**
+- **CodeQL Analysis**: Static code analysis for security vulnerabilities
+- **Trivy Scan**: Container and filesystem vulnerability scanning
+- **Supply Chain**: License and dependency checks with cargo-deny
+
+**Triggers:** Push to main, Pull requests, Daily at 2 AM UTC
+
+**Requires:** Security events write permission
+
+### Benchmark Workflow (`workflows/benchmark.yml`)
+
+Performance benchmarking and regression detection.
+
+**Jobs:**
+- **Benchmarks**: Runs cargo benchmarks
+  - Stores results for comparison
+  - Alerts on 150%+ performance regression
+- **Memory Profiling**: Tracks binary size and memory usage
+
+**Triggers:** Push to main, Pull requests, Manual dispatch
+
+### Cross Platform Workflow (`workflows/cross-platform.yml`)
+
+Tests on multiple distributions and Rust versions.
+
+**Jobs:**
+- **Distro Tests**: Tests on Ubuntu, Debian, Fedora, Arch Linux
+- **MSRV**: Minimum Supported Rust Version (1.70)
+- **Nightly**: Tests against Rust nightly (allowed to fail)
+
+**Triggers:** Push to main, Pull requests, Weekly on Sundays
+
+### Docker Workflow (`workflows/docker.yml`)
+
+Builds and publishes container images.
+
+**Jobs:**
+- **Build and Push**: Creates Debian and Alpine images
+  - Pushes to GitHub Container Registry (ghcr.io)
+  - Multi-platform support
+- **Container Scan**: Security scanning of built images
+
+**Triggers:** Push to main, Version tags, Pull requests
+
+**Images:**
+- `ghcr.io/ssahani/netevd:latest-debian`
+- `ghcr.io/ssahani/netevd:latest-alpine`
+- `ghcr.io/ssahani/netevd:v0.2.0-debian`
+
+### PR Automation Workflow (`workflows/pr-automation.yml`)
+
+Automates pull request management.
+
+**Jobs:**
+- **Auto Label**: Labels PRs based on changed files
+- **Size Labeler**: Adds size labels (xs, s, m, l, xl)
+- **Conventional Commits**: Validates commit messages
+- **PR Title**: Validates semantic PR titles
+- **Welcome**: Greets first-time contributors
+
+**Triggers:** PR opened, synchronized, labeled
+
+### Stale Workflow (`workflows/stale.yml`)
+
+Manages stale issues and pull requests.
+
+**Jobs:**
+- **Stale**: Marks and closes inactive items
+  - Issues: Stale after 90 days, closed after 14
+  - PRs: Stale after 60 days, closed after 14
+  - Exempts pinned and security items
+
+**Triggers:** Daily at 1 AM UTC, Manual dispatch
+
+## Configuration Files
+
+### Commit Linting (`.commitlintrc.json`)
+
+Enforces conventional commit format:
+- Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert, config
+- Max header length: 100 characters
+- No uppercase in subject
+
+### Auto Labeling (`labeler.yml`)
+
+Automatically labels PRs based on changed files:
+- `area: documentation` - Markdown files
+- `area: config` - Configuration files
+- `area: network` - Network code
+- `area: tests` - Test files
+- `area: ci` - CI/CD files
+- `area: security` - Security-related code
+- `area: api` - API and DBus code
+- `area: cli` - CLI code
+- `dependencies` - Cargo files
+
+### Dependency Policy (`deny.toml`)
+
+Cargo-deny configuration:
+- **Advisories**: Deny vulnerabilities, warn on unmaintained
+- **Licenses**: Allow MIT, Apache-2.0, BSD, ISC, LGPL-3.0-or-later
+- **Bans**: Warn on duplicate versions
+- **Sources**: Only allow crates.io registry
+
+### Docker Configuration
+
+**Dockerfiles:**
+- `Dockerfile.debian` - ~150MB, better compatibility
+- `Dockerfile.alpine` - ~50MB, minimal footprint
+
+**Features:**
+- Multi-stage builds
+- Non-root user
+- Capability support
+- Health checks
+- Optimized layers
+
+`.dockerignore` excludes unnecessary files from build context.
+

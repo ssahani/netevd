@@ -1,0 +1,58 @@
+# Label PRs based on changed files
+
+'area: documentation':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*.md'
+      - 'docs/**'
+
+'area: config':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/config/**'
+      - 'examples/*.yaml'
+      - '**/*.toml'
+
+'area: network':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/network/**'
+      - 'src/listeners/**'
+
+'area: tests':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tests/**'
+      - 'benches/**'
+      - '**/*_test.rs'
+
+'area: ci':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**'
+      - '.gitignore'
+
+'area: security':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/system/validation.rs'
+      - 'src/system/capability.rs'
+      - 'SECURITY.md'
+
+'area: api':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/api/**'
+      - 'src/bus/**'
+
+'area: cli':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/cli/**'
+      - 'src/main.rs'
+
+'dependencies':
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
