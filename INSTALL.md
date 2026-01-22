@@ -1,493 +1,446 @@
-# Installation Guide for netevd
+<!-- SPDX-License-Identifier: LGPL-3.0-or-later -->
 
-This document provides comprehensive installation instructions for netevd (Network Event Daemon).
+# Installation Guide
+
+This guide covers various methods to install netevd on your system.
 
 ## Table of Contents
 
-- [Prerequisites](#prerequisites)
-- [User Setup](#user-setup)
-- [Building from Source](#building-from-source)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Testing](#testing)
-- [Troubleshooting](#troubleshooting)
+- [System Requirements](#system-requirements)
+- [Installation Methods](#installation-methods)
+  - [From Source](#from-source)
+  - [Binary Release](#binary-release)
+  - [Package Managers](#package-managers)
+- [Post-Installation Setup](#post-installation-setup)
+- [Verification](#verification)
+- [Uninstallation](#uninstallation)
 
-## Prerequisites
+## System Requirements
 
-### System Requirements
+### Operating System
+- Linux with kernel 3.10 or later
+- systemd (for systemd-networkd backend and service management)
+- DBus support
 
-- Linux kernel 3.2 or later (for netlink support)
-- systemd (optional, for systemd-networkd/resolved integration)
+### Dependencies
+
+#### Runtime Dependencies
+- `systemd` (recommended)
+- `systemd-networkd` or `NetworkManager` or `dhclient`
+- Linux kernel with netlink support
+
+#### Build Dependencies
 - Rust 1.70 or later
-- Cargo package manager
+- Cargo
+- GCC or Clang (for linking)
+- pkg-config
+- Development headers for system libraries
 
-### For systemd-networkd mode:
-- `systemd-networkd` running
-- `systemd-resolved` (optional, for DNS management)
+## Installation Methods
 
-### For NetworkManager mode:
-- `NetworkManager` running
-- DBus system bus
+### From Source
 
-### For dhclient mode:
-- `dhclient` installed and running
-- Write access to `/var/lib/dhclient/`
+This is the recommended method for most users and provides the latest features.
 
-## User Setup
+#### 1. Install Rust
 
-netevd runs as an unprivileged user with limited capabilities for security. You must create the `netevd` user before running the daemon.
-
-### Create the netevd User
+If you don't have Rust installed:
 
 ```bash
-# Create system user without home directory or login shell
-sudo useradd --system \
-             --no-create-home \
-             --shell /usr/sbin/nologin \
-             --comment "Network Event Daemon" \
-             netevd
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
 ```
 
-### Verify User Creation
-
+Verify installation:
 ```bash
-# Check user was created
-id netevd
-
-# Should output something like:
-# uid=996(netevd) gid=994(netevd) groups=994(netevd)
+rustc --version
+cargo --version
 ```
 
-### User Details
-
-- **Username:** `netevd`
-- **Type:** System user (UID < 1000)
-- **Home directory:** None (system user)
-- **Login shell:** `/usr/sbin/nologin` (no interactive login)
-- **Groups:** `netevd` (primary group)
-- **Capabilities:** CAP_NET_ADMIN (granted by systemd service file)
-
-### Manual User Configuration (Alternative)
-
-If the above command doesn't work on your system:
-
-```bash
-# Create group first
-sudo groupadd --system netevd
-
-# Create user with specific UID/GID if needed
-sudo useradd --system \
-             --gid netevd \
-             --no-create-home \
-             --home-dir /nonexistent \
-             --shell /usr/sbin/nologin \
-             --comment "Network Event Daemon" \
-             netevd
-```
-
-### Why a Dedicated User?
-
-netevd runs as a dedicated user for security isolation:
-
-1. **Principle of Least Privilege:** Runs with minimal permissions
-2. **Capability Isolation:** Only CAP_NET_ADMIN is granted, not full root
-3. **Audit Trail:** Actions can be attributed to the `netevd` user
-4. **Process Isolation:** Cannot access other users' files or processes
-
-## Building from Source
-
-### Clone Repository
+#### 2. Clone the Repository
 
 ```bash
 git clone https://github.com/ssahani/netevd.git
 cd netevd
 ```
 
-### Build Release Binary
+#### 3. Build
 
 ```bash
-# Build optimized release binary
+# Build in release mode (optimized)
 cargo build --release
 
-# Binary will be at: target/release/netevd
+# The binary will be at: target/release/netevd
 ```
 
-### Run Tests
+#### 4. Install System-wide
 
 ```bash
-# Run test suite
-cargo test
-
-# Run with verbose output
-cargo test -- --nocapture
-
-# Run specific test
-cargo test test_validate_interface_name
-```
-
-### Check for Issues
-
-```bash
-# Run clippy for linting
-cargo clippy
-
-# Check formatting
-cargo fmt -- --check
-
-# Format code
-cargo fmt
-```
-
-## Installation
-
-### Install Binary
-
-```bash
-# Install to /usr/bin (requires root)
+# Install binary
 sudo install -Dm755 target/release/netevd /usr/bin/netevd
 
-# Verify installation
-which netevd
-netevd --version  # Will fail without config, but shows it's installed
+# Install systemd service file
+sudo install -Dm644 systemd/netevd.service /lib/systemd/system/netevd.service
+
+# Install example configuration
+sudo install -Dm644 examples/netevd.yaml /etc/netevd/netevd.yaml
 ```
 
-### Install Configuration
+#### 5. Create Required Directories
 
 ```bash
-# Create configuration directory
-sudo mkdir -p /etc/netevd
-
-# Install default configuration
-sudo install -Dm644 examples/netevd.yaml /etc/netevd/netevd.yaml
-
-# Create script directories
 sudo mkdir -p /etc/netevd/{carrier.d,no-carrier.d,configured.d,degraded.d,routable.d,activated.d,disconnected.d,manager.d,routes.d}
 ```
 
-### Install systemd Service
+#### 6. Create System User
 
 ```bash
-# Install service file
-sudo install -Dm644 systemd/netevd.service /lib/systemd/system/netevd.service
+sudo useradd -r -M -s /usr/bin/nologin -d /nonexistent netevd
+```
 
-# Reload systemd
+#### 7. Enable and Start Service
+
+```bash
 sudo systemctl daemon-reload
-
-# Enable service to start on boot
 sudo systemctl enable netevd
-
-# Start service
 sudo systemctl start netevd
-
-# Check status
-sudo systemctl status netevd
 ```
 
-### Set Permissions
+### Binary Release
+
+Download pre-built binaries from the [releases page](https://github.com/ssahani/netevd/releases).
 
 ```bash
-# Configuration directory should be readable by netevd user
-sudo chown -R root:root /etc/netevd
-sudo chmod 755 /etc/netevd
-sudo chmod 644 /etc/netevd/netevd.yaml
+# Download latest release (replace X.Y.Z with actual version)
+wget https://github.com/ssahani/netevd/releases/download/vX.Y.Z/netevd-x86_64-unknown-linux-gnu.tar.gz
 
-# Script directories should be readable and executable
-sudo chmod 755 /etc/netevd/*.d
+# Extract
+tar xzf netevd-x86_64-unknown-linux-gnu.tar.gz
+
+# Install
+sudo install -Dm755 netevd /usr/bin/netevd
 ```
 
-## Configuration
+Then follow steps 4-7 from the "From Source" section above.
 
-### Basic Configuration
+### Package Managers
+
+#### Cargo (crates.io)
+
+```bash
+cargo install netevd
+```
+
+The binary will be installed to `~/.cargo/bin/netevd`. You'll still need to:
+- Copy it to `/usr/bin/` (or add `~/.cargo/bin` to PATH)
+- Install the systemd service file manually
+- Create configuration and directories
+
+#### Arch Linux (AUR)
+
+```bash
+# Using yay
+yay -S netevd
+
+# Using paru
+paru -S netevd
+
+# Manual
+git clone https://aur.archlinux.org/netevd.git
+cd netevd
+makepkg -si
+```
+
+#### Fedora/RHEL/CentOS
+
+```bash
+# Download RPM from releases
+sudo dnf install netevd-X.Y.Z-1.x86_64.rpm
+
+# Or using rpm directly
+sudo rpm -ivh netevd-X.Y.Z-1.x86_64.rpm
+```
+
+#### Debian/Ubuntu
+
+```bash
+# Download DEB from releases
+sudo dpkg -i netevd_X.Y.Z_amd64.deb
+
+# Install dependencies if needed
+sudo apt-get install -f
+```
+
+## Post-Installation Setup
+
+### 1. Configure netevd
 
 Edit `/etc/netevd/netevd.yaml`:
 
 ```yaml
 system:
-  # Logging level: trace, debug, info, warn, error
   log_level: "info"
-
-  # Network backend: systemd-networkd, NetworkManager, or dhclient
-  backend: "systemd-networkd"
+  backend: "systemd-networkd"  # or "NetworkManager" or "dhclient"
 
 network:
-  # Space-separated list of interfaces to monitor (empty = all)
-  links: "eth0 eth1"
-
-  # Interfaces that need custom routing tables
-  routing_policy_rules: "eth1"
-
-  # Emit JSON data for systemd-networkd events
+  links: "eth0 eth1"  # Space-separated list of interfaces to monitor
+  routing_policy_rules: ""  # Interfaces needing custom routing
   emit_json: true
-
-  # Send DNS to systemd-resolved (dhclient only)
   use_dns: false
-
-  # Send domain to systemd-resolved (dhclient only)
   use_domain: false
-
-  # Send hostname to systemd-hostnamed (dhclient only)
   use_hostname: false
 ```
 
-### Create Example Scripts
+### 2. Set Up Scripts (Optional)
 
-Example routable script (`/etc/netevd/routable.d/01-notify.sh`):
+Create executable scripts in the appropriate directories:
 
 ```bash
+# Example: Create a script that runs when interface is routable
+sudo cat > /etc/netevd/routable.d/01-notify.sh << 'EOF'
 #!/bin/bash
-# This script runs when an interface becomes routable
-
 echo "Interface $LINK is now routable with IP: $ADDRESSES"
-logger -t netevd "Interface $LINK routable: $ADDRESSES"
+logger -t netevd "Interface $LINK is routable"
+EOF
 
-# Add your custom logic here
-```
-
-Make it executable:
-
-```bash
 sudo chmod +x /etc/netevd/routable.d/01-notify.sh
 ```
 
-### Restart After Configuration Changes
+### 3. Configure Your Network Backend
+
+#### For systemd-networkd
+
+Ensure systemd-networkd is running:
 
 ```bash
-sudo systemctl restart netevd
+sudo systemctl enable systemd-networkd
+sudo systemctl start systemd-networkd
 ```
 
-## Testing
+#### For NetworkManager
 
-### Test User Permissions
+Ensure NetworkManager is running:
 
 ```bash
-# Switch to netevd user (will fail if properly configured - that's good!)
-sudo su - netevd
-# Should output: "This account is currently not available."
-
-# Check user can access config
-sudo -u netevd cat /etc/netevd/netevd.yaml
+sudo systemctl enable NetworkManager
+sudo systemctl start NetworkManager
 ```
 
-### Test Binary Execution
+Configure netevd to use NetworkManager:
+
+```yaml
+system:
+  backend: "NetworkManager"
+```
+
+#### For dhclient
+
+Install dhclient if not present:
 
 ```bash
-# Run in foreground with debug logging
-sudo RUST_LOG=debug /usr/bin/netevd
+# Debian/Ubuntu
+sudo apt-get install isc-dhcp-client
 
-# Should output:
-# INFO Starting netevd - Network Event Daemon
-# INFO Configuration loaded: ...
-# INFO Dropping privileges to user 'netevd'
-# ...
+# Fedora/RHEL
+sudo dnf install dhclient
+```
+
+Configure netevd:
+
+```yaml
+system:
+  backend: "dhclient"
+
+network:
+  use_dns: true
+  use_domain: true
+  use_hostname: true
+```
+
+### 4. Adjust Permissions (if needed)
+
+```bash
+# Ensure netevd user can read configuration
+sudo chown -R root:netevd /etc/netevd
+sudo chmod -R 750 /etc/netevd
+```
+
+## Verification
+
+### Check Service Status
+
+```bash
+sudo systemctl status netevd
+```
+
+Expected output:
+```
+● netevd.service - Network Event Daemon
+     Loaded: loaded (/lib/systemd/system/netevd.service; enabled; vendor preset: enabled)
+     Active: active (running) since ...
+```
+
+### View Logs
+
+```bash
+# Follow logs in real-time
+sudo journalctl -u netevd -f
+
+# View recent logs
+sudo journalctl -u netevd -n 50
 ```
 
 ### Test Network Events
 
-#### For systemd-networkd:
+Trigger a network event and check if netevd responds:
 
 ```bash
-# Trigger network event
+# For systemd-networkd
 sudo networkctl reload
 
-# Watch logs
-sudo journalctl -u netevd -f
-```
-
-#### For NetworkManager:
-
-```bash
-# Restart interface
+# For NetworkManager
 sudo nmcli device disconnect eth0
 sudo nmcli device connect eth0
 
-# Watch logs
-sudo journalctl -u netevd -f
+# Check logs
+sudo journalctl -u netevd -n 20
 ```
 
-#### For dhclient:
+### Verify Binary
 
 ```bash
-# Restart dhclient
-sudo systemctl restart dhclient
+# Check version
+netevd --version
 
-# Watch logs
-sudo journalctl -u netevd -f
+# Verify installation path
+which netevd
+
+# Check file permissions
+ls -la /usr/bin/netevd
 ```
 
-### Verify Routing Policy Rules
-
-```bash
-# Check if custom routing tables are created
-ip rule list
-
-# Should see rules like:
-# 32765: from 192.168.1.100 lookup 203
-
-# Check routing table
-ip route show table 203
-```
-
-## Troubleshooting
-
-### User Not Found Error
-
-```
-Error: Failed to drop privileges
-Caused by: User 'netevd' not found
-```
-
-**Solution:** Create the netevd user (see [User Setup](#user-setup))
-
-```bash
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin netevd
-```
-
-### Permission Denied Errors
-
-```
-Error: Permission denied (os error 13)
-```
-
-**Solution:** Ensure netevd has read access to configuration:
-
-```bash
-sudo chmod 644 /etc/netevd/netevd.yaml
-sudo chmod 755 /etc/netevd
-```
+## Troubleshooting Installation
 
 ### Service Fails to Start
 
 ```bash
-# Check detailed error
-sudo systemctl status netevd
-sudo journalctl -u netevd -n 50
+# Check detailed status
+sudo systemctl status netevd -l
 
-# Common issues:
-# 1. Configuration file syntax error
-sudo /usr/bin/netevd  # Run manually to see error
-
-# 2. Missing capabilities
-sudo getcap /usr/bin/netevd
-# Should show: cap_net_admin=eip (if using file capabilities)
+# Check for errors
+sudo journalctl -u netevd -n 100 --no-pager
 ```
 
-### Scripts Not Executing
+Common issues:
+- **User doesn't exist**: Run `sudo useradd -r -M -s /usr/bin/nologin netevd`
+- **Configuration errors**: Validate YAML syntax in `/etc/netevd/netevd.yaml`
+- **Permission denied**: Check file ownership and permissions
+
+### Build Errors
 
 ```bash
-# Check script permissions
-ls -la /etc/netevd/routable.d/
+# Update Rust
+rustup update stable
 
-# Scripts must be executable
-sudo chmod +x /etc/netevd/routable.d/*.sh
+# Clean build
+cargo clean
+cargo build --release
 
-# Check logs for script execution
-sudo journalctl -u netevd | grep "Executing"
+# Check for missing dependencies
+pkg-config --list-all | grep -i ssl
 ```
 
-### No Events Received
+### Missing Capabilities
 
-For systemd-networkd:
-```bash
-# Check if networkd is running
-sudo systemctl status systemd-networkd
-
-# Verify DBus is accessible
-busctl list | grep networkd
-```
-
-For NetworkManager:
-```bash
-# Check if NetworkManager is running
-sudo systemctl status NetworkManager
-
-# Verify DBus
-busctl list | grep NetworkManager
-```
-
-For dhclient:
-```bash
-# Check if lease file exists
-ls -la /var/lib/dhclient/dhclient.leases
-
-# Check if it's being modified
-sudo inotifywait -m /var/lib/dhclient/dhclient.leases
-```
-
-### Debug Mode
-
-Run with debug logging:
+If netevd can't configure network:
 
 ```bash
-# Set environment variable
-sudo RUST_LOG=debug systemctl restart netevd
+# Option 1: Set file capabilities (systemd manages this)
+sudo setcap cap_net_admin+eip /usr/bin/netevd
 
-# Or edit service file
-sudo systemctl edit netevd
-
-# Add:
-[Service]
-Environment="RUST_LOG=debug"
-
-# Apply
-sudo systemctl daemon-reload
-sudo systemctl restart netevd
-```
-
-### Capabilities Issues
-
-```bash
-# Check capabilities
-sudo getcap /usr/bin/netevd
-
-# If using systemd, capabilities are granted by service file
-cat /lib/systemd/system/netevd.service | grep Capabilit
-
-# Should show:
-# AmbientCapabilities=CAP_NET_ADMIN
-# CapabilityBoundingSet=CAP_NET_ADMIN
+# Option 2: Use AmbientCapabilities in systemd service (preferred)
+# Already configured in netevd.service
 ```
 
 ## Uninstallation
 
-To remove netevd:
+### Stop and Disable Service
 
 ```bash
-# Stop and disable service
 sudo systemctl stop netevd
 sudo systemctl disable netevd
+```
 
-# Remove files
+### Remove Files
+
+```bash
+# Remove binary
 sudo rm /usr/bin/netevd
+
+# Remove systemd service
 sudo rm /lib/systemd/system/netevd.service
+sudo systemctl daemon-reload
+
+# Remove configuration (optional - backup first!)
+sudo cp -r /etc/netevd /etc/netevd.backup
 sudo rm -rf /etc/netevd
 
 # Remove user
 sudo userdel netevd
-
-# Reload systemd
-sudo systemctl daemon-reload
 ```
 
-## Security Notes
+### Package Manager Uninstall
 
-1. **User Isolation:** netevd runs as a dedicated system user, not root
-2. **Capabilities:** Only CAP_NET_ADMIN is granted, not full root privileges
-3. **Script Validation:** Environment variables are validated before passing to scripts
-4. **No Network Access:** systemd service restricts network namespace if configured
-5. **Read-only System:** systemd service mounts most of the filesystem read-only
+```bash
+# Arch Linux
+yay -R netevd
+
+# Fedora/RHEL
+sudo dnf remove netevd
+
+# Debian/Ubuntu
+sudo apt-get remove netevd
+
+# Cargo
+cargo uninstall netevd
+```
+
+## Upgrading
+
+### From Source
+
+```bash
+cd netevd
+git pull origin main
+cargo build --release
+sudo systemctl stop netevd
+sudo install -Dm755 target/release/netevd /usr/bin/netevd
+sudo systemctl start netevd
+```
+
+### Using Package Manager
+
+```bash
+# Arch Linux
+yay -Syu netevd
+
+# Fedora/RHEL
+sudo dnf upgrade netevd
+
+# Debian/Ubuntu
+sudo apt-get update
+sudo apt-get upgrade netevd
+```
 
 ## Next Steps
 
 After installation:
-
-1. Configure monitoring for your network manager
-2. Create custom scripts for network events
-3. Test routing policy rules if using multi-interface setup
-4. Set up logging aggregation if needed
-5. Configure monitoring/alerting for the service
+1. Read [CONFIGURATION.md](CONFIGURATION.md) for detailed configuration options
+2. Check [README.md](README.md) for usage examples
+3. Review [SECURITY.md](SECURITY.md) for security best practices
+4. See [CONTRIBUTING.md](CONTRIBUTING.md) if you want to contribute
 
 ## Support
 
-- **Issues:** https://github.com/ssahani/netevd/issues
-- **Documentation:** https://github.com/ssahani/netevd
-- **Author:** Susant Sahani <ssahani@redhat.com>
+- GitHub Issues: https://github.com/ssahani/netevd/issues
+- Documentation: https://github.com/ssahani/netevd

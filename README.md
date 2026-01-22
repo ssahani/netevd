@@ -1443,37 +1443,6 @@ gantt
 
 **Result**: Real-time events are **50-100x faster** than 5-second polling
 
-## Migration from network-broker (Go)
-
-If migrating from the Go version:
-
-```bash
-# 1. Stop old service
-sudo systemctl stop network-broker
-sudo systemctl disable network-broker
-
-# 2. Backup old config
-sudo cp -r /etc/network-broker /etc/network-broker.backup
-
-# 3. Convert configuration (TOML → YAML)
-# Manually convert or use migration script
-
-# 4. Install netevd (see Building from Source)
-
-# 5. Move scripts
-sudo cp -r /etc/network-broker/*.d /etc/netevd/
-
-# 6. Create new user
-sudo useradd -r -s /usr/bin/nologin netevd
-
-# 7. Start new service
-sudo systemctl enable --now netevd
-
-# 8. Verify
-sudo systemctl status netevd
-sudo journalctl -u netevd -f
-```
-
 ## Contributing
 
 Contributions are welcome! Please:
