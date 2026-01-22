@@ -34,7 +34,7 @@ futures = "0.3"
 
 # Netlink operations
 rtnetlink = "0.14"
-netlink-packet-route = "0.19"
+netlink-packet-route = "0.28"
 netlink-packet-core = "0.7"
 netlink-sys = "0.8"
 netlink-proto = "0.11"
