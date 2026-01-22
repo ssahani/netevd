@@ -286,6 +286,59 @@ fn test_full_workflow() {
 }
 ```
 
+### Functional Tests
+
+Functional tests create real network interfaces and verify daemon behavior. These tests require root privileges and are marked with `#[ignore]`.
+
+**Running functional tests**:
+
+```bash
+# Compile the tests first
+cargo test --test functional_test --no-run
+
+# Run with sudo (tests are sequential to avoid conflicts)
+sudo target/debug/deps/functional_test-* --test-threads=1 --ignored
+```
+
+**What functional tests cover**:
+
+- Creating and deleting dummy network interfaces
+- Bringing interfaces up and down
+- Adding IP addresses to interfaces
+- Creating and testing veth pairs
+- Script execution with environment variables
+- Event detection and response
+
+**Example functional test**:
+
+```rust
+#[test]
+#[ignore] // Requires root privileges
+fn test_interface_up_down() {
+    if !is_root() {
+        eprintln!("Skipping: requires root");
+        return;
+    }
+
+    // Create dummy interface
+    create_dummy_interface("dummy-test0").unwrap();
+
+    // Bring it up
+    bring_interface_up("dummy-test0").unwrap();
+
+    // Verify it's up
+    let output = Command::new("ip")
+        .args(["link", "show", "dummy-test0"])
+        .output()
+        .unwrap();
+
+    assert!(String::from_utf8_lossy(&output.stdout).contains("UP"));
+
+    // Cleanup
+    delete_interface("dummy-test0").unwrap();
+}
+```
+
 ### Manual Testing
 
 Test manually before submitting:
@@ -314,7 +367,12 @@ sudo journalctl -f
 
 2. **Run tests**:
    ```bash
+   # Run unit and integration tests
    cargo test
+
+   # Run functional tests (requires root)
+   cargo test --test functional_test --no-run
+   sudo target/debug/deps/functional_test-* --test-threads=1 --ignored
    ```
 
 3. **Check formatting**:
