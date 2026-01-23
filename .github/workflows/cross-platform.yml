@@ -32,7 +32,7 @@ jobs:
       image: ${{ matrix.distro }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install dependencies (Debian/Ubuntu)
         if: startsWith(matrix.distro, 'ubuntu') || startsWith(matrix.distro, 'debian')
@@ -69,7 +69,7 @@ jobs:
     name: Minimum Supported Rust Version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust 1.70
         uses: dtolnay/rust-toolchain@master
@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust Nightly
         uses: dtolnay/rust-toolchain@nightly
