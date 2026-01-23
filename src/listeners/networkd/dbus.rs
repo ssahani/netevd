@@ -13,6 +13,7 @@ use zbus::Connection;
 
 use crate::bus::{hostnamed, resolved};
 use crate::config::Config;
+use crate::filters::{EventFilter, NetworkEvent};
 use crate::network::{address::get_all_addresses, NetworkState};
 use crate::system::execute;
 use crate::system::paths::get_script_dir;
@@ -154,25 +155,51 @@ async fn handle_link_signal(
         }
     }
 
-    // Execute scripts for this state
+    // Execute scripts for this state (with filtering)
     let script_dir = get_script_dir(&current_state);
     if !current_state.is_empty() {
-        let mut env_vars = HashMap::new();
-        env_vars.insert("LINK".to_string(), link_name.clone());
-        env_vars.insert("LINKINDEX".to_string(), ifindex.to_string());
-        env_vars.insert("STATE".to_string(), current_state.clone());
+        // Create event filter from config
+        let event_filter = EventFilter {
+            filters: config.filters.clone(),
+        };
 
-        // Add JSON if enabled
-        if config.get_emit_json() {
-            if let Ok(json) = build_link_describe_json(ifindex, link_name.clone(), &link_state, address_strings.clone()) {
-                if let Ok(json_str) = serde_json::to_string(&json) {
-                    env_vars.insert("JSON".to_string(), json_str);
+        // Create network event for filtering
+        let network_event = NetworkEvent {
+            interface: link_name.clone(),
+            event_type: current_state.clone(),
+            backend: "systemd-networkd".to_string(),
+            addresses: addresses.clone(),
+            has_gateway: is_link_routable(ifindex),
+            dns_servers: link_state.dns.iter()
+                .filter_map(|s| s.parse().ok())
+                .collect(),
+        };
+
+        // Check if scripts should be executed based on filters
+        if event_filter.should_execute(&network_event) {
+            debug!("Event passed filters, executing scripts for {}", link_name);
+
+            let mut env_vars = HashMap::new();
+            env_vars.insert("LINK".to_string(), link_name.clone());
+            env_vars.insert("LINKINDEX".to_string(), ifindex.to_string());
+            env_vars.insert("STATE".to_string(), current_state.clone());
+            env_vars.insert("BACKEND".to_string(), "systemd-networkd".to_string());
+            env_vars.insert("ADDRESSES".to_string(), address_strings.join(" "));
+
+            // Add JSON if enabled
+            if config.get_emit_json() {
+                if let Ok(json) = build_link_describe_json(ifindex, link_name.clone(), &link_state, address_strings.clone()) {
+                    if let Ok(json_str) = serde_json::to_string(&json) {
+                        env_vars.insert("JSON".to_string(), json_str);
+                    }
                 }
             }
-        }
 
-        if let Err(e) = execute::execute_scripts(&script_dir, env_vars).await {
-            warn!("Failed to execute scripts in {}: {}", &script_dir, e);
+            if let Err(e) = execute::execute_scripts(&script_dir, env_vars).await {
+                warn!("Failed to execute scripts in {}: {}", &script_dir, e);
+            }
+        } else {
+            debug!("Event filtered out, skipping script execution for {}", link_name);
         }
     }
 

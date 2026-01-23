@@ -24,3 +24,50 @@ backends:
     use_hostname: false  # Send hostname to systemd-hostnamed
 
   networkmanager: {}
+
+# API server configuration
+api:
+  enabled: true  # Enable REST API server
+  bind_address: "127.0.0.1"  # Bind address (use 0.0.0.0 for all interfaces)
+  port: 9090  # API server port
+  tls:
+    enabled: false  # Enable TLS/SSL
+    cert_file: ""  # Path to TLS certificate
+    key_file: ""   # Path to TLS private key
+
+# Prometheus metrics configuration
+metrics:
+  enabled: true  # Enable Prometheus metrics endpoint
+  port: 9091  # Metrics endpoint port
+
+# Audit logging configuration
+audit:
+  enabled: false  # Enable audit logging
+  path: "/var/log/netevd/audit.log"  # Audit log file path
+  retention_days: 90  # Number of days to keep audit logs
+
+# Event filters (execute or ignore events based on rules)
+filters:
+  # Example 1: Only execute scripts for VPN interfaces
+  - match_rule:
+      interface_pattern: "wg*"  # Match WireGuard interfaces
+      event_type: "routable"
+    action: execute
+    scripts: []  # Empty means use default scripts for this event
+
+  # Example 2: Ignore docker/virtual interfaces
+  - match_rule:
+      interface_pattern: "docker*"
+    action: ignore
+
+  # Example 3: Only execute for interfaces with gateway
+  - match_rule:
+      interface: "eth0"
+      condition: "has_gateway"
+    action: execute
+
+  # Example 4: Log events for debugging
+  - match_rule:
+      backend: "NetworkManager"
+      event_type: "activated"
+    action: log

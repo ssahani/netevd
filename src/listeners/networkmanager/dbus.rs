@@ -12,6 +12,7 @@ use tracing::{debug, info, warn};
 use zbus::Connection;
 
 use crate::config::Config;
+use crate::filters::{EventFilter, NetworkEvent};
 use crate::network::{address::get_all_addresses, NetworkState};
 use crate::system::execute;
 use crate::system::paths::get_script_dir;
@@ -148,22 +149,44 @@ async fn handle_device_state_changed(
         .unwrap_or_default();
     let address_strings: Vec<String> = addresses.iter().map(|a| a.to_string()).collect();
 
-    // Execute scripts for this state
+    // Execute scripts for this state (with filtering)
     let script_dir = get_script_dir(&state_name);
     if !state_name.is_empty() {
-        let mut env_vars = HashMap::new();
-        env_vars.insert("LINK".to_string(), interface.clone());
-        env_vars.insert("LINKINDEX".to_string(), ifindex.to_string());
-        env_vars.insert("STATE".to_string(), state_name.clone());
-        env_vars.insert("BACKEND".to_string(), "NetworkManager".to_string());
+        // Create event filter from config
+        let event_filter = EventFilter {
+            filters: config.filters.clone(),
+        };
 
-        // Add addresses to environment
-        if !address_strings.is_empty() {
-            env_vars.insert("ADDRESSES".to_string(), address_strings.join(" "));
-        }
+        // Create network event for filtering
+        let network_event = NetworkEvent {
+            interface: interface.clone(),
+            event_type: state_name.clone(),
+            backend: "NetworkManager".to_string(),
+            addresses: addresses.clone(),
+            has_gateway: device_state == NM_DEVICE_STATE_ACTIVATED,
+            dns_servers: Vec::new(), // NetworkManager DNS handled differently
+        };
 
-        if let Err(e) = execute::execute_scripts(&script_dir, env_vars).await {
-            warn!("Failed to execute scripts in {}: {}", &script_dir, e);
+        // Check if scripts should be executed based on filters
+        if event_filter.should_execute(&network_event) {
+            debug!("Event passed filters, executing scripts for {}", interface);
+
+            let mut env_vars = HashMap::new();
+            env_vars.insert("LINK".to_string(), interface.clone());
+            env_vars.insert("LINKINDEX".to_string(), ifindex.to_string());
+            env_vars.insert("STATE".to_string(), state_name.clone());
+            env_vars.insert("BACKEND".to_string(), "NetworkManager".to_string());
+
+            // Add addresses to environment
+            if !address_strings.is_empty() {
+                env_vars.insert("ADDRESSES".to_string(), address_strings.join(" "));
+            }
+
+            if let Err(e) = execute::execute_scripts(&script_dir, env_vars).await {
+                warn!("Failed to execute scripts in {}: {}", &script_dir, e);
+            }
+        } else {
+            debug!("Event filtered out, skipping script execution for {}", interface);
         }
     }
 

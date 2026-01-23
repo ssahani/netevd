@@ -15,6 +15,7 @@ use tracing_subscriber::EnvFilter;
 
 mod bus;
 mod config;
+mod filters;
 mod listeners;
 mod network;
 mod system;

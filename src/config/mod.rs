@@ -8,6 +8,8 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
+use crate::filters::Filter;
+
 const DEFAULT_CONFIG_PATH: &str = "/etc/netevd/netevd.yaml";
 const DEFAULT_LOG_LEVEL: &str = "info";
 const DEFAULT_BACKEND: &str = "systemd-networkd";
@@ -36,7 +38,7 @@ pub struct Config {
     pub audit: AuditConfig,
 
     #[serde(default)]
-    pub filters: Vec<crate::filters::Filter>,
+    pub filters: Vec<Filter>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

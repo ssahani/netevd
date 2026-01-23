@@ -18,6 +18,7 @@ use tracing::{debug, info, warn};
 
 use crate::bus::{hostnamed, resolved};
 use crate::config::Config;
+use crate::filters::{EventFilter, NetworkEvent};
 use crate::network::NetworkState;
 use crate::system::execute;
 use crate::system::paths::get_script_dir;
@@ -173,41 +174,74 @@ async fn process_lease_file(
             }
         }
 
-        // Execute scripts in routable.d/
+        // Execute scripts in routable.d/ (with filtering)
         let script_dir = get_script_dir("routable");
-        let mut env_vars = HashMap::new();
-        env_vars.insert("LINK".to_string(), interface.clone());
-        env_vars.insert("LINKINDEX".to_string(), ifindex.to_string());
-        env_vars.insert("STATE".to_string(), "routable".to_string());
-        env_vars.insert("BACKEND".to_string(), "dhclient".to_string());
-        env_vars.insert("ADDRESSES".to_string(), lease.address.clone());
 
-        // Add DHCP-specific variables
-        env_vars.insert("DHCP_ADDRESS".to_string(), lease.address.clone());
+        // Create event filter from config
+        let event_filter = EventFilter {
+            filters: config.filters.clone(),
+        };
 
-        if let Some(mask) = &lease.subnet_mask {
-            env_vars.insert("DHCP_SUBNET_MASK".to_string(), mask.clone());
-        }
+        // Parse address and DNS servers
+        let addresses: Vec<std::net::IpAddr> = lease.address
+            .parse()
+            .ok()
+            .into_iter()
+            .collect();
+        let dns_servers: Vec<std::net::IpAddr> = lease.dns_servers.iter()
+            .filter_map(|s| s.parse().ok())
+            .collect();
 
-        if !lease.routers.is_empty() {
-            env_vars.insert("DHCP_GATEWAY".to_string(), lease.routers.join(" "));
-        }
+        // Create network event for filtering
+        let network_event = NetworkEvent {
+            interface: interface.clone(),
+            event_type: "routable".to_string(),
+            backend: "dhclient".to_string(),
+            addresses,
+            has_gateway: !lease.routers.is_empty(),
+            dns_servers,
+        };
 
-        if !lease.dns_servers.is_empty() {
-            env_vars.insert("DHCP_DNS".to_string(), lease.dns_servers.join(" "));
-        }
+        // Check if scripts should be executed based on filters
+        if event_filter.should_execute(&network_event) {
+            debug!("Event passed filters, executing scripts for {}", interface);
 
-        if let Some(domain) = &lease.domain_name {
-            env_vars.insert("DHCP_DOMAIN".to_string(), domain.clone());
-        }
+            let mut env_vars = HashMap::new();
+            env_vars.insert("LINK".to_string(), interface.clone());
+            env_vars.insert("LINKINDEX".to_string(), ifindex.to_string());
+            env_vars.insert("STATE".to_string(), "routable".to_string());
+            env_vars.insert("BACKEND".to_string(), "dhclient".to_string());
+            env_vars.insert("ADDRESSES".to_string(), lease.address.clone());
 
-        if let Some(hostname) = &lease.hostname {
-            env_vars.insert("DHCP_HOSTNAME".to_string(), hostname.clone());
-        }
+            // Add DHCP-specific variables
+            env_vars.insert("DHCP_ADDRESS".to_string(), lease.address.clone());
 
-        // Execute scripts
-        if let Err(e) = execute::execute_scripts(&script_dir, env_vars).await {
-            warn!("Failed to execute scripts in {}: {}", script_dir, e);
+            if let Some(mask) = &lease.subnet_mask {
+                env_vars.insert("DHCP_SUBNET_MASK".to_string(), mask.clone());
+            }
+
+            if !lease.routers.is_empty() {
+                env_vars.insert("DHCP_GATEWAY".to_string(), lease.routers.join(" "));
+            }
+
+            if !lease.dns_servers.is_empty() {
+                env_vars.insert("DHCP_DNS".to_string(), lease.dns_servers.join(" "));
+            }
+
+            if let Some(domain) = &lease.domain_name {
+                env_vars.insert("DHCP_DOMAIN".to_string(), domain.clone());
+            }
+
+            if let Some(hostname) = &lease.hostname {
+                env_vars.insert("DHCP_HOSTNAME".to_string(), hostname.clone());
+            }
+
+            // Execute scripts
+            if let Err(e) = execute::execute_scripts(&script_dir, env_vars).await {
+                warn!("Failed to execute scripts in {}: {}", script_dir, e);
+            }
+        } else {
+            debug!("Event filtered out, skipping script execution for {}", interface);
         }
 
         // Handle routing policy rules if configured
