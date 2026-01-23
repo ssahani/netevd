@@ -45,6 +45,70 @@ A high-performance network event daemon written in Rust that configures network 
 - ☁️ **Cloud Provider Integration**: AWS EC2, Azure, and GCP API integrations
 - 📦 **Multiple Distribution Formats**: Available on crates.io, with RPM, DEB, and AUR packages
 
+## 📚 Comprehensive Documentation
+
+netevd comes with extensive documentation covering all aspects from installation to advanced usage.
+
+```mermaid
+graph LR
+    subgraph "Getting Started"
+        GS1[Quick Start<br/>5 minutes]
+        GS2[Installation<br/>All platforms]
+        GS3[Configuration<br/>Complete guide]
+    end
+
+    subgraph "Usage & Examples"
+        USE1[Real-World Examples<br/>10+ scenarios]
+        USE2[REST API<br/>Full reference]
+        USE3[Prometheus Metrics<br/>Monitoring guide]
+    end
+
+    subgraph "Advanced"
+        ADV1[Architecture<br/>Deep dive]
+        ADV2[Troubleshooting<br/>Problem solving]
+        ADV3[Contributing<br/>Development]
+    end
+
+    GS1 --> GS2 --> GS3
+    GS3 --> USE1
+    GS3 --> USE2
+    GS3 --> USE3
+    USE1 & USE2 & USE3 --> ADV1 & ADV2 & ADV3
+
+    style GS1 fill:#4caf50,color:#fff
+    style USE1 fill:#2196f3,color:#fff
+    style ADV1 fill:#ff9800,color:#fff
+```
+
+### 🚀 Quick Links
+
+| Documentation | Description | When to Use |
+|---------------|-------------|-------------|
+| **[Quick Start](#quick-start)** ⬇️ | Get netevd running in 5 minutes | Starting out |
+| **[Installation Guide](INSTALL.md)** | Detailed installation for all platforms | Setting up |
+| **[Configuration Guide](CONFIGURATION.md)** | Complete configuration reference | Customizing behavior |
+| **[Real-World Examples](docs/EXAMPLES.md)** | Multi-homing, VPN, HA, DNS, monitoring | Solving specific problems |
+| **[REST API Reference](docs/API.md)** | 9 endpoints with examples | Integration & automation |
+| **[Prometheus Metrics](docs/METRICS.md)** | 15+ metrics, Grafana dashboards | Monitoring & alerting |
+| **[Architecture Deep Dive](docs/ARCHITECTURE.md)** | Internal design & concurrency model | Understanding internals |
+| **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** | Common issues & solutions | Solving problems |
+| **[Contributing Guide](CONTRIBUTING.md)** | Development setup & guidelines | Contributing code |
+| **[Security Model](SECURITY.md)** | Security architecture | Security review |
+
+### 📖 Documentation by Use Case
+
+**I want to...**
+
+- **Run scripts when network changes** → Start with [Quick Start](#quick-start) below
+- **Configure multi-interface routing** → See [Multi-Homed Server Example](docs/EXAMPLES.md#multi-homed-server)
+- **Integrate with VPN (WireGuard/OpenVPN)** → See [VPN Integration Example](docs/EXAMPLES.md#vpn-integration)
+- **Set up high availability failover** → See [HA Setup Example](docs/EXAMPLES.md#high-availability-setup)
+- **Update dynamic DNS automatically** → See [Dynamic DNS Example](docs/EXAMPLES.md#dynamic-dns-updates)
+- **Monitor with Prometheus/Grafana** → See [Metrics Guide](docs/METRICS.md)
+- **Automate via REST API** → See [API Reference](docs/API.md)
+- **Troubleshoot issues** → See [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+- **Contribute to the project** → See [Contributing Guide](CONTRIBUTING.md)
+
 ## 📊 Architecture Overview
 
 ```mermaid
