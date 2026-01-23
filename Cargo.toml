@@ -73,7 +73,7 @@ notify = { version = "6.1", features = ["serde"] }
 
 # System/Security
 caps = "0.5"
-nix = { version = "0.29", features = ["user", "process", "signal"] }
+nix = { version = "0.31", features = ["user", "process", "signal"] }
 libc = "0.2"
 
 # Parsing
