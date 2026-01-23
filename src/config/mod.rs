@@ -4,6 +4,7 @@
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use std::env;
 use std::fs;
 use std::path::Path;
 
@@ -24,6 +25,18 @@ pub struct Config {
 
     #[serde(default)]
     pub backends: BackendsConfig,
+
+    #[serde(default)]
+    pub api: ApiConfig,
+
+    #[serde(default)]
+    pub metrics: MetricsConfig,
+
+    #[serde(default)]
+    pub audit: AuditConfig,
+
+    #[serde(default)]
+    pub filters: Vec<crate::filters::Filter>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -89,6 +102,58 @@ pub struct NetworkManagerConfig {
     // Placeholder for future NetworkManager-specific options
 }
 
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct ApiConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    #[serde(default = "default_bind_address")]
+    pub bind_address: String,
+
+    #[serde(default = "default_api_port")]
+    pub port: u16,
+
+    #[serde(default)]
+    pub tls: TlsConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct TlsConfig {
+    #[serde(default)]
+    pub enabled: bool,
+
+    #[serde(default)]
+    pub cert_file: Option<String>,
+
+    #[serde(default)]
+    pub key_file: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct MetricsConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    #[serde(default = "default_metrics_port")]
+    pub port: u16,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct AuditConfig {
+    #[serde(default)]
+    pub enabled: bool,
+
+    #[serde(default = "default_audit_path")]
+    pub path: String,
+
+    #[serde(default = "default_retention_days")]
+    pub retention_days: u32,
+}
+
 impl Default for SystemConfig {
     fn default() -> Self {
         Self {
@@ -146,6 +211,46 @@ impl Default for NetworkManagerConfig {
     }
 }
 
+impl Default for ApiConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            bind_address: "127.0.0.1".to_string(),
+            port: 9090,
+            tls: TlsConfig::default(),
+        }
+    }
+}
+
+impl Default for TlsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cert_file: None,
+            key_file: None,
+        }
+    }
+}
+
+impl Default for MetricsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            port: 9091,
+        }
+    }
+}
+
+impl Default for AuditConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            path: "/var/log/netevd/audit.log".to_string(),
+            retention_days: 90,
+        }
+    }
+}
+
 impl MonitoringConfig {
     /// Get interfaces as a vector
     pub fn get_interfaces(&self) -> Vec<String> {
@@ -172,6 +277,26 @@ fn default_true() -> bool {
     true
 }
 
+fn default_bind_address() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_api_port() -> u16 {
+    9090
+}
+
+fn default_metrics_port() -> u16 {
+    9091
+}
+
+fn default_audit_path() -> String {
+    "/var/log/netevd/audit.log".to_string()
+}
+
+fn default_retention_days() -> u32 {
+    90
+}
+
 impl Config {
     /// Parse configuration from file and environment variables
     pub fn parse() -> Result<Self> {
@@ -181,7 +306,7 @@ impl Config {
     /// Parse configuration from a specific path
     pub fn parse_from_path(path: &str) -> Result<Self> {
         // Try to read config file
-        let config = if Path::new(path).exists() {
+        let mut config = if Path::new(path).exists() {
             let contents = fs::read_to_string(path)
                 .with_context(|| format!("Failed to read config file: {}", path))?;
 
@@ -192,8 +317,31 @@ impl Config {
             Config::default()
         };
 
-        // TODO: Override with environment variables if needed
+        // Override with environment variables
         // Environment variable pattern: NETEVD_SYSTEM_LOG_LEVEL, etc.
+        if let Ok(log_level) = env::var("NETEVD_LOG_LEVEL") {
+            config.system.log_level = log_level;
+        }
+        if let Ok(backend) = env::var("NETEVD_BACKEND") {
+            config.system.backend = backend;
+        }
+        if let Ok(api_enabled) = env::var("NETEVD_API_ENABLED") {
+            config.api.enabled = api_enabled.parse().unwrap_or(true);
+        }
+        if let Ok(api_bind) = env::var("NETEVD_API_BIND_ADDRESS") {
+            config.api.bind_address = api_bind;
+        }
+        if let Ok(api_port) = env::var("NETEVD_API_PORT") {
+            if let Ok(port) = api_port.parse() {
+                config.api.port = port;
+            }
+        }
+        if let Ok(metrics_enabled) = env::var("NETEVD_METRICS_ENABLED") {
+            config.metrics.enabled = metrics_enabled.parse().unwrap_or(true);
+        }
+        if let Ok(audit_enabled) = env::var("NETEVD_AUDIT_ENABLED") {
+            config.audit.enabled = audit_enabled.parse().unwrap_or(false);
+        }
 
         Ok(config)
     }
@@ -248,6 +396,10 @@ impl Default for Config {
             monitoring: MonitoringConfig::default(),
             routing: RoutingConfig::default(),
             backends: BackendsConfig::default(),
+            api: ApiConfig::default(),
+            metrics: MetricsConfig::default(),
+            audit: AuditConfig::default(),
+            filters: Vec::new(),
         }
     }
 }
