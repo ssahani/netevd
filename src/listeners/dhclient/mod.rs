@@ -19,6 +19,7 @@ use tracing::{debug, info, warn};
 use crate::bus::{hostnamed, resolved};
 use crate::config::Config;
 use crate::filters::{EventFilter, NetworkEvent};
+use crate::metrics::MetricsHandle;
 use crate::network::NetworkState;
 use crate::system::execute;
 use crate::system::paths::get_script_dir;
@@ -32,6 +33,7 @@ pub async fn watch_lease_file(
     config: Config,
     handle: Handle,
     state: Arc<RwLock<NetworkState>>,
+    metrics: Option<MetricsHandle>,
 ) -> Result<()> {
     info!("Starting dhclient lease file watcher: {}", DHCLIENT_LEASE_FILE);
 
@@ -72,7 +74,7 @@ pub async fn watch_lease_file(
 
     // Process initial leases if file exists
     if Path::new(DHCLIENT_LEASE_FILE).exists() {
-        if let Err(e) = process_lease_file(&config, &handle, &state).await {
+        if let Err(e) = process_lease_file(&config, &handle, &state, &metrics).await {
             warn!("Failed to process initial lease file: {}", e);
         }
     }
@@ -98,7 +100,7 @@ pub async fn watch_lease_file(
             _ = debounce_timer.tick() => {
                 if pending_update {
                     pending_update = false;
-                    if let Err(e) = process_lease_file(&config, &handle, &state).await {
+                    if let Err(e) = process_lease_file(&config, &handle, &state, &metrics).await {
                         warn!("Failed to process lease file: {}", e);
                     }
                 }
@@ -112,6 +114,7 @@ async fn process_lease_file(
     config: &Config,
     _handle: &Handle,
     state: &Arc<RwLock<NetworkState>>,
+    metrics: &Option<MetricsHandle>,
 ) -> Result<()> {
     debug!("Processing lease file: {}", DHCLIENT_LEASE_FILE);
 
@@ -127,6 +130,16 @@ async fn process_lease_file(
     // Process each lease
     for (interface, lease) in leases.iter() {
         info!("Processing DHCP lease for interface {}: {}", interface, lease.address);
+
+        // Record metrics for DHCP lease event
+        if let Some(ref m) = &metrics {
+            m.interface_state_changes
+                .with_label_values(&[interface, "routable"])
+                .inc();
+            m.events_total
+                .with_label_values(&["routable", interface, "dhclient"])
+                .inc();
+        }
 
         // Get interface index
         let ifindex_opt = {

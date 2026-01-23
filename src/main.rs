@@ -17,10 +17,12 @@ mod bus;
 mod config;
 mod filters;
 mod listeners;
+mod metrics;
 mod network;
 mod system;
 
 use config::Config;
+use metrics::{Metrics, MetricsHandle};
 use network::{link, watcher, NetworkState};
 use system::user;
 
@@ -43,6 +45,24 @@ async fn main() -> Result<()> {
 
     // Update logging level based on config
     update_log_level(&config.system.log_level);
+
+    // Initialize metrics if enabled
+    let metrics: Option<MetricsHandle> = if config.metrics.enabled {
+        match Metrics::new() {
+            Ok(m) => {
+                let metrics_handle = Arc::new(m);
+                info!("Metrics collection enabled on port {}", config.metrics.port);
+                Some(metrics_handle)
+            }
+            Err(e) => {
+                warn!("Failed to initialize metrics: {}, continuing without metrics", e);
+                None
+            }
+        }
+    } else {
+        info!("Metrics collection disabled");
+        None
+    };
 
     // Drop privileges if running as root
     if user::is_root() {
@@ -85,6 +105,7 @@ async fn main() -> Result<()> {
     let handle_link = handle.clone();
     let handle_listener = handle.clone();
     let config_listener = config.clone();
+    let metrics_listener = metrics.clone();
 
     // Set up signal handlers
     let mut sigterm = signal(SignalKind::terminate())
@@ -111,7 +132,7 @@ async fn main() -> Result<()> {
         result = watcher::watch_links(handle_link, state_link) => {
             warn!("Link watcher exited: {:?}", result);
         }
-        result = spawn_listener(config_listener, handle_listener, state_listener) => {
+        result = spawn_listener(config_listener, handle_listener, state_listener, metrics_listener) => {
             warn!("Backend listener exited: {:?}", result);
         }
     }
@@ -152,19 +173,20 @@ async fn spawn_listener(
     config: Config,
     handle: Handle,
     state: Arc<RwLock<NetworkState>>,
+    metrics: Option<MetricsHandle>,
 ) -> Result<()> {
     match config.system.backend.as_str() {
         "systemd-networkd" => {
             info!("Starting systemd-networkd listener");
-            listeners::networkd::listen_networkd(config, handle, state).await
+            listeners::networkd::listen_networkd(config, handle, state, metrics).await
         }
         "NetworkManager" => {
             info!("Starting NetworkManager listener");
-            listeners::networkmanager::listen_networkmanager(config, handle, state).await
+            listeners::networkmanager::listen_networkmanager(config, handle, state, metrics).await
         }
         "dhclient" => {
             info!("Starting dhclient listener");
-            listeners::dhclient::watch_lease_file(config, handle, state).await
+            listeners::dhclient::watch_lease_file(config, handle, state, metrics).await
         }
         _ => anyhow::bail!("Unknown backend: {}", config.system.backend),
     }

@@ -13,6 +13,7 @@ use zbus::Connection;
 
 use crate::config::Config;
 use crate::filters::{EventFilter, NetworkEvent};
+use crate::metrics::MetricsHandle;
 use crate::network::{address::get_all_addresses, NetworkState};
 use crate::system::execute;
 use crate::system::paths::get_script_dir;
@@ -40,6 +41,7 @@ pub async fn listen_networkmanager(
     config: Config,
     handle: Handle,
     state: Arc<RwLock<NetworkState>>,
+    metrics: Option<MetricsHandle>,
 ) -> Result<()> {
     info!("Starting NetworkManager DBus listener");
 
@@ -56,7 +58,7 @@ pub async fn listen_networkmanager(
     while let Some(msg) = stream.next().await {
         if let Ok(msg) = msg {
             let signal = msg.header();
-            
+
             // Look for StateChanged signals
             if signal.member().map(|m| m.as_str()) == Some("StateChanged") {
                 if let Some(path) = signal.path().map(|p| p.as_str()) {
@@ -70,6 +72,7 @@ pub async fn listen_networkmanager(
                             &connection,
                             path,
                             &mut last_states,
+                            &metrics,
                         )
                         .await
                         {
@@ -92,6 +95,7 @@ async fn handle_device_state_changed(
     connection: &Connection,
     device_path: &str,
     last_states: &mut HashMap<u32, u32>,
+    metrics: &Option<MetricsHandle>,
 ) -> Result<()> {
     // Get device properties via DBus
     let proxy = zbus::Proxy::new(
@@ -142,6 +146,16 @@ async fn handle_device_state_changed(
         "NetworkManager device {} ({}) state changed to: {}",
         interface, ifindex, state_name
     );
+
+    // Record metrics for state change
+    if let Some(ref m) = metrics {
+        m.interface_state_changes
+            .with_label_values(&[&interface, &state_name])
+            .inc();
+        m.events_total
+            .with_label_values(&[&state_name, &interface, "NetworkManager"])
+            .inc();
+    }
 
     // Get addresses
     let addresses = get_all_addresses(handle, ifindex)

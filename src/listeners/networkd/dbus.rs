@@ -14,6 +14,7 @@ use zbus::Connection;
 use crate::bus::{hostnamed, resolved};
 use crate::config::Config;
 use crate::filters::{EventFilter, NetworkEvent};
+use crate::metrics::MetricsHandle;
 use crate::network::{address::get_all_addresses, NetworkState};
 use crate::system::execute;
 use crate::system::paths::get_script_dir;
@@ -29,6 +30,7 @@ pub async fn listen_networkd(
     config: Config,
     handle: Handle,
     state: Arc<RwLock<NetworkState>>,
+    metrics: Option<MetricsHandle>,
 ) -> Result<()> {
     info!("Starting systemd-networkd DBus listener");
 
@@ -59,6 +61,7 @@ pub async fn listen_networkd(
                                     &state,
                                     ifindex,
                                     &mut last_states,
+                                    &metrics,
                                 )
                                 .await
                                 {
@@ -82,6 +85,7 @@ async fn handle_link_signal(
     state: &Arc<RwLock<NetworkState>>,
     ifindex: u32,
     last_states: &mut HashMap<u32, String>,
+    metrics: &Option<MetricsHandle>,
 ) -> Result<()> {
     // Get link name
     let link_name = {
@@ -113,6 +117,16 @@ async fn handle_link_signal(
         "Link {} ({}) state changed to: {}",
         link_name, ifindex, current_state
     );
+
+    // Record metrics for state change
+    if let Some(ref m) = metrics {
+        m.interface_state_changes
+            .with_label_values(&[&link_name, &current_state])
+            .inc();
+        m.events_total
+            .with_label_values(&[&current_state, &link_name, "systemd-networkd"])
+            .inc();
+    }
 
     // Get addresses for this interface
     let addresses = get_all_addresses(handle, ifindex)
