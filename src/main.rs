@@ -13,6 +13,7 @@ use tokio::sync::RwLock;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
+mod audit;
 mod bus;
 mod config;
 mod filters;
@@ -21,9 +22,11 @@ mod metrics;
 mod network;
 mod system;
 
+use audit::AuditLogger;
 use config::Config;
 use metrics::{Metrics, MetricsHandle};
 use network::{link, watcher, NetworkState};
+use std::path::PathBuf;
 use system::user;
 
 const DEFAULT_USER: &str = "netevd";
@@ -63,6 +66,17 @@ async fn main() -> Result<()> {
         info!("Metrics collection disabled");
         None
     };
+
+    // Initialize audit logger
+    let audit_logger = Arc::new(AuditLogger::new(
+        Some(PathBuf::from(&config.audit.path)),
+        config.audit.enabled,
+    ));
+    if config.audit.enabled {
+        info!("Audit logging enabled: {}", config.audit.path);
+    } else {
+        info!("Audit logging disabled");
+    }
 
     // Drop privileges if running as root
     if user::is_root() {
@@ -106,6 +120,7 @@ async fn main() -> Result<()> {
     let handle_listener = handle.clone();
     let config_listener = config.clone();
     let metrics_listener = metrics.clone();
+    let audit_listener = audit_logger.clone();
 
     // Set up signal handlers
     let mut sigterm = signal(SignalKind::terminate())
@@ -132,7 +147,7 @@ async fn main() -> Result<()> {
         result = watcher::watch_links(handle_link, state_link) => {
             warn!("Link watcher exited: {:?}", result);
         }
-        result = spawn_listener(config_listener, handle_listener, state_listener, metrics_listener) => {
+        result = spawn_listener(config_listener, handle_listener, state_listener, metrics_listener, audit_listener) => {
             warn!("Backend listener exited: {:?}", result);
         }
     }
@@ -174,19 +189,20 @@ async fn spawn_listener(
     handle: Handle,
     state: Arc<RwLock<NetworkState>>,
     metrics: Option<MetricsHandle>,
+    audit: Arc<AuditLogger>,
 ) -> Result<()> {
     match config.system.backend.as_str() {
         "systemd-networkd" => {
             info!("Starting systemd-networkd listener");
-            listeners::networkd::listen_networkd(config, handle, state, metrics).await
+            listeners::networkd::listen_networkd(config, handle, state, metrics, audit).await
         }
         "NetworkManager" => {
             info!("Starting NetworkManager listener");
-            listeners::networkmanager::listen_networkmanager(config, handle, state, metrics).await
+            listeners::networkmanager::listen_networkmanager(config, handle, state, metrics, audit).await
         }
         "dhclient" => {
             info!("Starting dhclient listener");
-            listeners::dhclient::watch_lease_file(config, handle, state, metrics).await
+            listeners::dhclient::watch_lease_file(config, handle, state, metrics, audit).await
         }
         _ => anyhow::bail!("Unknown backend: {}", config.system.backend),
     }

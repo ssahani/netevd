@@ -75,7 +75,6 @@ pub async fn listen_networkmanager(
                             path,
                             &mut last_states,
                             &metrics,
-                            &audit,
                         )
                         .await
                         {
@@ -99,7 +98,6 @@ async fn handle_device_state_changed(
     device_path: &str,
     last_states: &mut HashMap<u32, u32>,
     metrics: &Option<MetricsHandle>,
-    audit: &Arc<AuditLogger>,
 ) -> Result<()> {
     // Get device properties via DBus
     let proxy = zbus::Proxy::new(
@@ -160,14 +158,6 @@ async fn handle_device_state_changed(
             .with_label_values(&[&state_name, &interface, "NetworkManager"])
             .inc();
     }
-
-    // Log audit event
-    audit.log_network_event(
-        &interface,
-        &state_name,
-        AuditResult::Success,
-        None,
-    );
 
     // Get addresses
     let addresses = get_all_addresses(handle, ifindex)

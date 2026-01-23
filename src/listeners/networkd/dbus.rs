@@ -11,6 +11,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use zbus::Connection;
 
+use crate::audit::{AuditLogger, AuditResult};
 use crate::bus::{hostnamed, resolved};
 use crate::config::Config;
 use crate::filters::{EventFilter, NetworkEvent};
@@ -31,6 +32,7 @@ pub async fn listen_networkd(
     handle: Handle,
     state: Arc<RwLock<NetworkState>>,
     metrics: Option<MetricsHandle>,
+    audit: Arc<AuditLogger>,
 ) -> Result<()> {
     info!("Starting systemd-networkd DBus listener");
 
@@ -62,6 +64,7 @@ pub async fn listen_networkd(
                                     ifindex,
                                     &mut last_states,
                                     &metrics,
+                                    &audit,
                                 )
                                 .await
                                 {
@@ -86,6 +89,7 @@ async fn handle_link_signal(
     ifindex: u32,
     last_states: &mut HashMap<u32, String>,
     metrics: &Option<MetricsHandle>,
+    audit: &Arc<AuditLogger>,
 ) -> Result<()> {
     // Get link name
     let link_name = {
@@ -127,6 +131,14 @@ async fn handle_link_signal(
             .with_label_values(&[&current_state, &link_name, "systemd-networkd"])
             .inc();
     }
+
+    // Log audit event
+    audit.log_network_event(
+        &link_name,
+        &current_state,
+        AuditResult::Success,
+        None,
+    );
 
     // Get addresses for this interface
     let addresses = get_all_addresses(handle, ifindex)

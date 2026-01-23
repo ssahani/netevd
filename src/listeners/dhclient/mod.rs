@@ -16,6 +16,7 @@ use tokio::sync::RwLock;
 use tokio::time;
 use tracing::{debug, info, warn};
 
+use crate::audit::{AuditLogger, AuditResult};
 use crate::bus::{hostnamed, resolved};
 use crate::config::Config;
 use crate::filters::{EventFilter, NetworkEvent};
@@ -34,6 +35,7 @@ pub async fn watch_lease_file(
     handle: Handle,
     state: Arc<RwLock<NetworkState>>,
     metrics: Option<MetricsHandle>,
+    audit: Arc<AuditLogger>,
 ) -> Result<()> {
     info!("Starting dhclient lease file watcher: {}", DHCLIENT_LEASE_FILE);
 
@@ -74,7 +76,7 @@ pub async fn watch_lease_file(
 
     // Process initial leases if file exists
     if Path::new(DHCLIENT_LEASE_FILE).exists() {
-        if let Err(e) = process_lease_file(&config, &handle, &state, &metrics).await {
+        if let Err(e) = process_lease_file(&config, &handle, &state, &metrics, &audit).await {
             warn!("Failed to process initial lease file: {}", e);
         }
     }
@@ -100,7 +102,7 @@ pub async fn watch_lease_file(
             _ = debounce_timer.tick() => {
                 if pending_update {
                     pending_update = false;
-                    if let Err(e) = process_lease_file(&config, &handle, &state, &metrics).await {
+                    if let Err(e) = process_lease_file(&config, &handle, &state, &metrics, &audit).await {
                         warn!("Failed to process lease file: {}", e);
                     }
                 }
@@ -115,6 +117,7 @@ async fn process_lease_file(
     _handle: &Handle,
     state: &Arc<RwLock<NetworkState>>,
     metrics: &Option<MetricsHandle>,
+    audit: &Arc<AuditLogger>,
 ) -> Result<()> {
     debug!("Processing lease file: {}", DHCLIENT_LEASE_FILE);
 
@@ -140,6 +143,14 @@ async fn process_lease_file(
                 .with_label_values(&["routable", interface, "dhclient"])
                 .inc();
         }
+
+        // Log audit event
+        audit.log_network_event(
+            interface,
+            "routable",
+            AuditResult::Success,
+            None,
+        );
 
         // Get interface index
         let ifindex_opt = {
