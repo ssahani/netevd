@@ -57,7 +57,7 @@ tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 hyper = { version = "1.0", features = ["full"] }
 
 # Metrics
-prometheus = { version = "0.13", features = ["process"] }
+prometheus = { version = "0.14", features = ["process"] }
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
