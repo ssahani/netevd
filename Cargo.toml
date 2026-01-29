@@ -33,7 +33,7 @@ tokio-stream = "0.1"
 futures = "0.3"
 
 # Netlink operations
-rtnetlink = "0.14"
+rtnetlink = "0.20"
 netlink-packet-route = "0.19"  # Match rtnetlink version
 netlink-packet-core = "0.8"
 netlink-sys = "0.8"
