@@ -1104,7 +1104,7 @@ dependencies = [
  "signal-hook 0.3.18",
  "signal-hook-tokio",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
  "tower",
