@@ -85,7 +85,7 @@ anyhow = "1.0"
 thiserror = "2.0"
 
 # Network types
-ipnetwork = "0.20"
+ipnetwork = "0.21"
 
 # Optional features
 signal-hook = "0.4"
