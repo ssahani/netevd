@@ -40,7 +40,7 @@ netlink-sys = "0.8"
 netlink-proto = "0.12"
 
 # DBus
-zbus = { version = "5.13", features = ["tokio"] }
+zbus = { version = "5.14", features = ["tokio"] }
 
 # Configuration
 serde = { version = "1.0", features = ["derive"] }
