@@ -3,7 +3,7 @@
 //! User and privilege management
 
 use anyhow::{anyhow, Context, Result};
-use nix::unistd::{setgid, setuid, Gid, Uid, User};
+use nix::unistd::{setgid, setgroups, setuid, Gid, Uid, User};
 use tracing::{info, warn};
 
 use super::capability::{apply_capabilities, clear_keep_capabilities, keep_capabilities};
@@ -48,6 +48,10 @@ pub fn drop_privileges(username: &str) -> Result<()> {
     // Step 2: Drop group privileges first (must be done before setuid)
     setgid(gid)
         .with_context(|| format!("Failed to setgid to {}", gid))?;
+
+    // Step 2b: Clear supplementary groups to prevent privilege retention
+    setgroups(&[gid])
+        .context("Failed to clear supplementary groups")?;
 
     // Step 3: Drop user privileges
     setuid(uid)

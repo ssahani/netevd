@@ -59,25 +59,15 @@ pub async fn add_route(
     );
 
     // Convert gateway to the proper type
-    match gateway {
+    let result = match gateway {
         IpAddr::V4(gw_v4) => {
             let route_msg = RouteMessageBuilder::<std::net::Ipv4Addr>::new()
-                .destination_prefix(std::net::Ipv4Addr::new(0, 0, 0, 0), 0) // 0.0.0.0/0
+                .destination_prefix(std::net::Ipv4Addr::new(0, 0, 0, 0), 0)
                 .gateway(gw_v4)
                 .output_interface(ifindex)
                 .table_id(table)
                 .build();
-            handle
-                .route()
-                .add(route_msg)
-                .execute()
-                .await
-                .with_context(|| {
-                    format!(
-                        "Failed to add IPv4 route for interface {} via {} in table {}",
-                        ifindex, gateway, table
-                    )
-                })?;
+            handle.route().add(route_msg).execute().await
         }
         IpAddr::V6(gw_v6) => {
             let route_msg = RouteMessageBuilder::<std::net::Ipv6Addr>::new()
@@ -86,21 +76,24 @@ pub async fn add_route(
                 .output_interface(ifindex)
                 .table_id(table)
                 .build();
-            handle
-                .route()
-                .add(route_msg)
-                .execute()
-                .await
-                .with_context(|| {
-                    format!(
-                        "Failed to add IPv6 route for interface {} via {} in table {}",
-                        ifindex, gateway, table
-                    )
-                })?;
+            handle.route().add(route_msg).execute().await
+        }
+    };
+
+    match result {
+        Ok(()) => {
+            info!("Successfully added route in table {}", table);
+        }
+        Err(ref e) if e.to_string().contains("File exists") => {
+            debug!("Route already exists in table {}, skipping", table);
+        }
+        Err(e) => {
+            return Err(e).with_context(|| {
+                format!("Failed to add route for interface {} via {} in table {}", ifindex, gateway, table)
+            });
         }
     }
 
-    info!("Successfully added route in table {}", table);
     Ok(())
 }
 

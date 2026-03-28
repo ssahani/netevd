@@ -151,8 +151,8 @@ async fn handle_reload(endpoint: &str) -> Result<()> {
     // TODO: POST to /api/v1/reload
     let response = send_reload_request(endpoint).await?;
 
-    println!("✓ Configuration reloaded successfully");
     println!("  Message: {}", response.message);
+    println!("  Note: config reload not yet implemented on server side");
 
     Ok(())
 }
@@ -191,8 +191,7 @@ async fn handle_test_script(
         println!("  IP address: {}", ip_addr);
     }
 
-    // TODO: Execute script with test environment variables
-    println!("\nWould execute with environment:");
+    println!("\nDry-run environment (script not actually executed):");
     println!("  LINK={}", interface);
     println!("  STATE={}", event_type);
     println!("  BACKEND=test");
@@ -200,7 +199,7 @@ async fn handle_test_script(
         println!("  ADDRESSES={}", ip_addr);
     }
 
-    println!("\n✓ Script test completed");
+    println!("\nNote: actual script execution not yet implemented in test mode");
 
     Ok(())
 }

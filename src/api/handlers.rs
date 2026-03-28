@@ -136,11 +136,11 @@ pub async fn reload_config(
 /// GET /health
 pub async fn health_check() -> Json<HealthStatus> {
     Json(HealthStatus {
-        status: "healthy".to_string(),
+        status: "unknown".to_string(),
         checks: HealthChecks {
-            dbus: true,    // TODO: Check actual DBus connection
-            netlink: true, // TODO: Check actual netlink connection
-            config: true,  // TODO: Check config validity
+            dbus: false,
+            netlink: false,
+            config: false,
         },
     })
 }

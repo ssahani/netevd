@@ -24,9 +24,12 @@ impl ApiServer {
         let cors = CorsLayer::new()
             .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _| {
                 origin.to_str().map_or(false, |s| {
-                    s.starts_with("http://127.0.0.1")
-                        || s.starts_with("http://localhost")
-                        || s.starts_with("http://[::1]")
+                    s == "http://127.0.0.1"
+                        || s.starts_with("http://127.0.0.1:")
+                        || s == "http://localhost"
+                        || s.starts_with("http://localhost:")
+                        || s == "http://[::1]"
+                        || s.starts_with("http://[::1]:")
                 })
             }))
             .allow_methods([Method::GET, Method::POST])

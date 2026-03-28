@@ -22,19 +22,17 @@ pub async fn set_link_dns(ifindex: u32, dns_servers: Vec<String>) -> Result<()> 
         ifindex, dns_servers
     );
 
-    let connection = Connection::system()
-        .await
-        .context("Failed to connect to system bus")?;
+    let connection = get_system_bus().await?;
 
-    // Convert DNS servers to the format expected by systemd-resolved
-    // Format: array of (address_family, address_bytes)
     let dns_array: Vec<(i32, Vec<u8>)> = dns_servers
         .iter()
         .filter_map(|server| {
             if let Ok(addr) = server.parse::<std::net::IpAddr>() {
+                let ifindex_i32 = i32::try_from(ifindex).ok()?;
+                let _ = ifindex_i32; // validated
                 match addr {
-                    std::net::IpAddr::V4(ipv4) => Some((2, ipv4.octets().to_vec())), // AF_INET = 2
-                    std::net::IpAddr::V6(ipv6) => Some((10, ipv6.octets().to_vec())), // AF_INET6 = 10
+                    std::net::IpAddr::V4(ipv4) => Some((2, ipv4.octets().to_vec())),
+                    std::net::IpAddr::V6(ipv6) => Some((10, ipv6.octets().to_vec())),
                 }
             } else {
                 None
@@ -47,7 +45,8 @@ pub async fn set_link_dns(ifindex: u32, dns_servers: Vec<String>) -> Result<()> 
         return Ok(());
     }
 
-    // Call SetLinkDNS method
+    let ifindex_i32 = i32::try_from(ifindex).context("ifindex out of i32 range")?;
+
     let proxy = zbus::Proxy::new(
         &connection,
         RESOLVED_SERVICE,
@@ -58,7 +57,7 @@ pub async fn set_link_dns(ifindex: u32, dns_servers: Vec<String>) -> Result<()> 
     .context("Failed to create resolved proxy")?;
 
     proxy
-        .call_method("SetLinkDNS", &(ifindex as i32, dns_array))
+        .call_method("SetLinkDNS", &(ifindex_i32, dns_array))
         .await
         .context("Failed to call SetLinkDNS")?;
 
@@ -78,15 +77,11 @@ pub async fn set_link_domains(ifindex: u32, domains: Vec<String>) -> Result<()> 
         ifindex, domains
     );
 
-    let connection = Connection::system()
-        .await
-        .context("Failed to connect to system bus")?;
+    let connection = get_system_bus().await?;
+    let ifindex_i32 = i32::try_from(ifindex).context("ifindex out of i32 range")?;
 
-    // Convert domains to the format expected by systemd-resolved
-    // Format: array of (domain, route_only)
     let domain_array: Vec<(String, bool)> = domains.iter().map(|d| (d.clone(), false)).collect();
 
-    // Call SetLinkDomains method
     let proxy = zbus::Proxy::new(
         &connection,
         RESOLVED_SERVICE,
@@ -97,10 +92,33 @@ pub async fn set_link_domains(ifindex: u32, domains: Vec<String>) -> Result<()> 
     .context("Failed to create resolved proxy")?;
 
     proxy
-        .call_method("SetLinkDomains", &(ifindex as i32, domain_array))
+        .call_method("SetLinkDomains", &(ifindex_i32, domain_array))
         .await
         .context("Failed to call SetLinkDomains")?;
 
     info!("Successfully set DNS domains for interface {}", ifindex);
     Ok(())
+}
+
+/// Get or create a cached system bus connection
+async fn get_system_bus() -> Result<Connection> {
+    use std::sync::OnceLock;
+    use tokio::sync::Mutex;
+
+    static BUS: OnceLock<Mutex<Option<Connection>>> = OnceLock::new();
+    let lock = BUS.get_or_init(|| Mutex::new(None));
+    let mut guard = lock.lock().await;
+
+    if let Some(ref conn) = *guard {
+        // Check if connection is still alive by trying a basic operation
+        if conn.is_bus() {
+            return Ok(conn.clone());
+        }
+    }
+
+    let conn = Connection::system()
+        .await
+        .context("Failed to connect to system bus")?;
+    *guard = Some(conn.clone());
+    Ok(conn)
 }

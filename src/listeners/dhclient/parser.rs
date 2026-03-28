@@ -73,31 +73,31 @@ pub fn parse_lease_file(path: &str) -> Result<HashMap<String, Lease>> {
                     }
                 }
                 // option subnet-mask 255.255.255.0;
-                else if line.contains("subnet-mask") {
+                else if line.starts_with("option subnet-mask ") {
                     if let Some(mask) = extract_value(line) {
                         lease.subnet_mask = Some(mask);
                     }
                 }
                 // option routers 192.168.1.1;
-                else if line.contains("routers") {
+                else if line.starts_with("option routers ") {
                     if let Some(router) = extract_value(line) {
                         lease.routers = router.split(',').map(|s| s.trim().to_string()).collect();
                     }
                 }
                 // option domain-name-servers 8.8.8.8, 8.8.4.4;
-                else if line.contains("domain-name-servers") {
+                else if line.starts_with("option domain-name-servers ") {
                     if let Some(dns) = extract_value(line) {
                         lease.dns_servers = dns.split(',').map(|s| s.trim().to_string()).collect();
                     }
                 }
                 // option domain-name "example.com";
-                else if line.contains("domain-name") && !line.contains("domain-name-servers") {
+                else if line.starts_with("option domain-name ") {
                     if let Some(domain) = extract_quoted_value(line) {
                         lease.domain_name = Some(domain);
                     }
                 }
                 // option host-name "myhost";
-                else if line.contains("host-name") {
+                else if line.starts_with("option host-name ") {
                     if let Some(hostname) = extract_quoted_value(line) {
                         lease.hostname = Some(hostname);
                     }

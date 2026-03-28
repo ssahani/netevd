@@ -310,7 +310,7 @@
     </div>
 
     <script>
-        const API_BASE = `${window.location.protocol}//${window.location.hostname}:9090/api/v1`;
+        const API_BASE = `${window.location.origin}/api/v1`;
 
         function escapeHtml(text) {
             const div = document.createElement('div');
@@ -349,7 +349,7 @@
                         <tr>
                             <td><strong>${escapeHtml(iface.name)}</strong></td>
                             <td><span class="badge badge-success">${escapeHtml(iface.state)}</span></td>
-                            <td>${escapeHtml(iface.addresses.join(', ') || '-')}</td>
+                            <td>${escapeHtml((iface.addresses || []).join(', ') || '-')}</td>
                             <td><code>${escapeHtml(iface.mac_address || '-')}</code></td>
                         </tr>
                     `).join('');

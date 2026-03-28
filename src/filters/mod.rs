@@ -114,13 +114,23 @@ impl Filter {
 
         // Check interface pattern match (escape regex metacharacters, anchor pattern)
         if let Some(ref pattern) = self.match_rule.interface_pattern {
-            let escaped = regex::escape(pattern).replace(r"\*", ".*");
-            if let Ok(regex) = Regex::new(&format!("^{}$", escaped)) {
-                if !regex.is_match(&event.interface) {
-                    return false;
-                }
-            } else {
-                tracing::warn!("Invalid interface pattern: {}", pattern);
+            use std::sync::OnceLock;
+            use std::collections::HashMap;
+            use std::sync::Mutex;
+
+            static PATTERN_CACHE: OnceLock<Mutex<HashMap<String, Regex>>> = OnceLock::new();
+            let cache = PATTERN_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+
+            let mut cache_guard = cache.lock().unwrap();
+            let regex = cache_guard.entry(pattern.clone()).or_insert_with(|| {
+                let escaped = regex::escape(pattern).replace(r"\*", ".*");
+                Regex::new(&format!("^{}$", escaped)).unwrap_or_else(|_| {
+                    tracing::warn!("Invalid interface pattern: {}", pattern);
+                    Regex::new("^$").unwrap() // will match nothing
+                })
+            });
+
+            if !regex.is_match(&event.interface) {
                 return false;
             }
         }
@@ -210,8 +220,9 @@ impl Filter {
             }
         }
 
-        // Default: unrecognized condition, return true
-        true
+        // Unrecognized condition: warn and reject to avoid unintended matches
+        tracing::warn!("Unrecognized filter condition: '{}', treating as false", condition);
+        false
     }
 }
 

@@ -10,9 +10,9 @@ use std::net::IpAddr;
 use tracing::{debug, info, warn};
 
 /// Base table number for custom routing tables
-/// Using an uncommon number (200) to avoid conflicts with existing configurations
-/// Linux reserves tables 0-255 for system use, but 200-250 are rarely used
-pub const ROUTE_TABLE_BASE: u32 = 200;
+/// Must be above 255 to avoid conflicts with reserved system tables
+/// (0=unspec, 253=default, 254=main, 255=local)
+pub const ROUTE_TABLE_BASE: u32 = 1000;
 
 /// Add a routing policy rule (from address -> table)
 pub async fn add_routing_rule_from(
@@ -177,13 +177,12 @@ mod tests {
 
     #[test]
     fn test_route_table_base() {
-        assert_eq!(ROUTE_TABLE_BASE, 200);
+        assert!(ROUTE_TABLE_BASE > 255, "table base must be above reserved range");
     }
 
     #[test]
     fn test_table_calculation() {
-        // From route.rs
-        assert_eq!(ROUTE_TABLE_BASE + 2, 202);
-        assert_eq!(ROUTE_TABLE_BASE + 10, 210);
+        assert_eq!(ROUTE_TABLE_BASE + 2, 1002);
+        assert_eq!(ROUTE_TABLE_BASE + 10, 1010);
     }
 }

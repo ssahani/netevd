@@ -137,6 +137,8 @@ async fn execute_script(script_path: &Path, env_vars: &HashMap<String, String>) 
             "DHCP_GATEWAY" => validation::validate_ip_list(value),
             "STATE" => validation::validate_state_name(value),
             "LINKINDEX" => value.chars().all(|c| c.is_ascii_digit()),
+            "JSON" => true, // Trusted: serialized by our own code
+            "BACKEND" | "EVENT" => validation::sanitize_env_value(value).is_some(),
             // For other variables, apply general sanitization
             _ => validation::sanitize_env_value(value).is_some(),
         };

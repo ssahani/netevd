@@ -90,9 +90,8 @@ pub async fn watch_lease_file(
         tokio::select! {
             Some(event) = rx.recv() => {
                 // Check if the event is for our lease file
-                let is_lease_file = event.paths.iter().any(|p| {
-                    p.to_str().map(|s| s.contains("dhclient.leases")).unwrap_or(false)
-                });
+                let lease_path = std::path::Path::new(DHCLIENT_LEASE_FILE);
+                let is_lease_file = event.paths.iter().any(|p| p == lease_path);
 
                 if is_lease_file {
                     debug!("Lease file modified: {:?}", event.kind);

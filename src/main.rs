@@ -36,13 +36,8 @@ async fn main() -> Result<()> {
     // Parse configuration first (before logging init so we can apply log level)
     let config = Config::parse().context("Failed to parse configuration")?;
 
-    // Apply config log level if RUST_LOG is not already set
-    if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", &config.system.log_level);
-    }
-
-    // Initialize logging with the resolved level
-    init_logging();
+    // Initialize logging with config level (RUST_LOG env takes precedence)
+    init_logging(&config.system.log_level);
 
     info!("Starting netevd - Network Event Daemon");
     info!("Version: {}", env!("CARGO_PKG_VERSION"));
@@ -159,10 +154,10 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Initialize logging with default settings
-fn init_logging() {
+/// Initialize logging with the given default level (RUST_LOG env takes precedence)
+fn init_logging(default_level: &str) {
     let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+        .unwrap_or_else(|_| EnvFilter::new(default_level));
 
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)

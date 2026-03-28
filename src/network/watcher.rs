@@ -69,9 +69,10 @@ pub async fn watch_addresses(
     // Track addresses we've seen before
     let mut last_seen_addresses: HashSet<(u32, IpAddr)> = HashSet::new();
 
-    // Subscribe to address change notifications via multicast groups
+    // Subscribe to IPv4 address change notifications only
+    // (IPv6 policy routing is handled separately via the ipv6 module)
     let (connection, mut messages) =
-        new_event_receiver(&[libc::RTNLGRP_IPV4_IFADDR as u32, libc::RTNLGRP_IPV6_IFADDR as u32])?;
+        new_event_receiver(&[libc::RTNLGRP_IPV4_IFADDR as u32])?;
     tokio::spawn(connection);
 
     info!("Address watcher subscribed to netlink multicast groups");
@@ -146,6 +147,20 @@ pub async fn watch_addresses(
                         // Remove old addresses from tracking
                         last_seen_addresses.retain(|(idx, _)| *idx != ifindex);
                     } else {
+                        // Clean up rules for removed addresses before adding new ones
+                        let removed_addrs: Vec<IpAddr> = old_addrs.iter()
+                            .filter(|(_, addr)| !current_addrs.contains(&(ifindex, *addr)))
+                            .map(|(_, addr)| *addr)
+                            .collect();
+                        if !removed_addrs.is_empty() {
+                            let table = calculate_table_id(ifindex);
+                            for addr in &removed_addrs {
+                                let _ = remove_routing_rules(&handle, *addr, table).await;
+                                state.write().await.routing_rules_from.remove(addr);
+                                state.write().await.routing_rules_to.remove(addr);
+                            }
+                        }
+
                         info!(
                             "Configuring routing rules for interface {} with {} addresses",
                             link_name,

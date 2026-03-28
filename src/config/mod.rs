@@ -345,6 +345,17 @@ impl Config {
             config.audit.enabled = audit_enabled.parse().unwrap_or(false);
         }
 
+        // Validate backend
+        match config.system.backend.as_str() {
+            "systemd-networkd" | "NetworkManager" | "dhclient" => {}
+            other => {
+                anyhow::bail!(
+                    "Invalid backend '{}'. Valid options: systemd-networkd, NetworkManager, dhclient",
+                    other
+                );
+            }
+        }
+
         Ok(config)
     }
 
