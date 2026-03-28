@@ -310,7 +310,13 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:9090/api/v1';
+        const API_BASE = `${window.location.protocol}//${window.location.hostname}:9090/api/v1`;
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = String(text);
+            return div.innerHTML;
+        }
 
         async function fetchStatus() {
             try {
@@ -341,10 +347,10 @@
                 if (data.success && data.data && data.data.length > 0) {
                     tbody.innerHTML = data.data.map(iface => `
                         <tr>
-                            <td><strong>${iface.name}</strong></td>
-                            <td><span class="badge badge-success">${iface.state}</span></td>
-                            <td>${iface.addresses.join(', ') || '-'}</td>
-                            <td><code>${iface.mac_address || '-'}</code></td>
+                            <td><strong>${escapeHtml(iface.name)}</strong></td>
+                            <td><span class="badge badge-success">${escapeHtml(iface.state)}</span></td>
+                            <td>${escapeHtml(iface.addresses.join(', ') || '-')}</td>
+                            <td><code>${escapeHtml(iface.mac_address || '-')}</code></td>
                         </tr>
                     `).join('');
                 } else {
@@ -365,10 +371,10 @@
                 if (data.success && data.data && data.data.length > 0) {
                     tbody.innerHTML = data.data.map(rule => `
                         <tr>
-                            <td>${rule.priority}</td>
-                            <td><code>${rule.source || '-'}</code></td>
-                            <td>${rule.table}</td>
-                            <td>${rule.interface || '-'}</td>
+                            <td>${escapeHtml(rule.priority)}</td>
+                            <td><code>${escapeHtml(rule.source || '-')}</code></td>
+                            <td>${escapeHtml(rule.table)}</td>
+                            <td>${escapeHtml(rule.interface || '-')}</td>
                         </tr>
                     `).join('');
                 } else {
@@ -389,8 +395,8 @@
                 if (data.success && data.data && data.data.length > 0) {
                     eventLog.innerHTML = data.data.map(event => `
                         <div class="event-item">
-                            <div class="event-time">${new Date(event.timestamp).toLocaleString()}</div>
-                            <div><strong>${event.event_type}</strong> on ${event.interface}</div>
+                            <div class="event-time">${escapeHtml(new Date(event.timestamp).toLocaleString())}</div>
+                            <div><strong>${escapeHtml(event.event_type)}</strong> on ${escapeHtml(event.interface)}</div>
                         </div>
                     `).join('');
                 } else {

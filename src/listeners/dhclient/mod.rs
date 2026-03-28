@@ -190,10 +190,14 @@ async fn process_lease_file(
         // Send hostname to systemd-hostnamed if configured
         if config.get_use_hostname() {
             if let Some(hostname) = &lease.hostname {
-                if let Err(e) = hostnamed::set_static_hostname(hostname).await {
-                    warn!("Failed to set hostname: {}", e);
+                if crate::system::validation::validate_hostname(hostname) {
+                    if let Err(e) = hostnamed::set_static_hostname(hostname).await {
+                        warn!("Failed to set hostname: {}", e);
+                    } else {
+                        info!("Set hostname: {}", hostname);
+                    }
                 } else {
-                    info!("Set hostname: {}", hostname);
+                    warn!("Rejected invalid hostname from DHCP: {}", hostname);
                 }
             }
         }

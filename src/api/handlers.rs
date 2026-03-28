@@ -127,8 +127,8 @@ pub async fn reload_config(
 ) -> Json<ReloadResponse> {
     // TODO: Implement config reload
     Json(ReloadResponse {
-        success: true,
-        message: "Configuration reloaded successfully".to_string(),
+        success: false,
+        message: "Configuration reload not yet implemented".to_string(),
         timestamp: chrono::Utc::now(),
     })
 }
@@ -147,9 +147,10 @@ pub async fn health_check() -> Json<HealthStatus> {
 
 /// GET /metrics
 pub async fn metrics() -> String {
-    // TODO: Return Prometheus metrics
-    "# HELP netevd_info netevd daemon information\n\
-     # TYPE netevd_info gauge\n\
-     netevd_info{version=\"0.1.0\"} 1\n"
-        .to_string()
+    format!(
+        "# HELP netevd_info netevd daemon information\n\
+         # TYPE netevd_info gauge\n\
+         netevd_info{{version=\"{}\"}} 1\n",
+        env!("CARGO_PKG_VERSION")
+    )
 }

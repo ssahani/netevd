@@ -7,7 +7,11 @@
 //! approach which had 5-second intervals.
 
 use anyhow::Result;
+use futures::channel::mpsc::UnboundedReceiver;
 use futures::stream::StreamExt;
+use netlink_packet_core::NetlinkMessage;
+use netlink_packet_route::RouteNetlinkMessage;
+use netlink_sys::{protocols::NETLINK_ROUTE, SocketAddr as NetlinkSocketAddr, TokioSocket};
 use rtnetlink::Handle;
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -22,6 +26,32 @@ use super::{
     NetworkState,
 };
 
+/// Create a netlink event receiver subscribed to the specified multicast groups.
+/// This only returns a message receiver (no Handle), since the event watchers
+/// only need to receive multicast notifications, not send requests.
+fn new_event_receiver(
+    groups: &[u32],
+) -> std::io::Result<(
+    impl std::future::Future<Output = ()>,
+    UnboundedReceiver<(NetlinkMessage<RouteNetlinkMessage>, NetlinkSocketAddr)>,
+)> {
+    use std::os::unix::io::{AsRawFd, FromRawFd};
+
+    let mut socket = netlink_sys::Socket::new(NETLINK_ROUTE)?;
+    let addr = NetlinkSocketAddr::new(0, 0);
+    socket.bind(&addr)?;
+    for group in groups {
+        socket.add_membership(*group)?;
+    }
+    socket.set_non_blocking(true)?;
+    let raw_fd = socket.as_raw_fd();
+    std::mem::forget(socket);
+    let async_socket = unsafe { TokioSocket::from_raw_fd(raw_fd) };
+    let (conn, _handle, messages) =
+        netlink_proto::from_socket_with_codec::<RouteNetlinkMessage, TokioSocket, netlink_proto::NetlinkCodec>(async_socket);
+    Ok((async move { conn.await; }, messages))
+}
+
 /// Watch for address changes using real-time netlink events
 pub async fn watch_addresses(
     handle: Handle,
@@ -33,11 +63,12 @@ pub async fn watch_addresses(
     // Track addresses we've seen before
     let mut last_seen_addresses: HashSet<(u32, IpAddr)> = HashSet::new();
 
-    // Subscribe to address change notifications
-    let (connection, _, mut messages) = rtnetlink::new_connection()?;
+    // Subscribe to address change notifications via multicast groups
+    let (connection, mut messages) =
+        new_event_receiver(&[libc::RTNLGRP_IPV4_IFADDR as u32, libc::RTNLGRP_IPV6_IFADDR as u32])?;
     tokio::spawn(connection);
 
-    info!("Address watcher subscribed to netlink events");
+    info!("Address watcher subscribed to netlink multicast groups");
 
     // Process address change events in real-time
     while let Some((message, _)) = messages.next().await {
@@ -136,14 +167,15 @@ pub async fn watch_addresses(
 }
 
 /// Watch for route changes using real-time netlink events
-pub async fn watch_routes(handle: Handle, state: Arc<RwLock<NetworkState>>) -> Result<()> {
+pub async fn watch_routes(_handle: Handle, state: Arc<RwLock<NetworkState>>) -> Result<()> {
     info!("Starting route watcher (real-time netlink events)");
 
-    // Subscribe to route change notifications
-    let (connection, _, mut messages) = rtnetlink::new_connection()?;
+    // Subscribe to route change notifications via multicast groups
+    let (connection, mut messages) =
+        new_event_receiver(&[libc::RTNLGRP_IPV4_ROUTE as u32, libc::RTNLGRP_IPV6_ROUTE as u32])?;
     tokio::spawn(connection);
 
-    info!("Route watcher subscribed to netlink events");
+    info!("Route watcher subscribed to netlink multicast groups");
 
     // Process route change events
     while let Some((message, _)) = messages.next().await {
@@ -203,14 +235,15 @@ pub async fn watch_routes(handle: Handle, state: Arc<RwLock<NetworkState>>) -> R
 }
 
 /// Watch for link changes using real-time netlink events
-pub async fn watch_links(handle: Handle, state: Arc<RwLock<NetworkState>>) -> Result<()> {
+pub async fn watch_links(_handle: Handle, state: Arc<RwLock<NetworkState>>) -> Result<()> {
     info!("Starting link watcher (real-time netlink events)");
 
-    // Subscribe to link change notifications
-    let (connection, _, mut messages) = rtnetlink::new_connection()?;
+    // Subscribe to link change notifications via multicast groups
+    let (connection, mut messages) =
+        new_event_receiver(&[libc::RTNLGRP_LINK as u32])?;
     tokio::spawn(connection);
 
-    info!("Link watcher subscribed to netlink events");
+    info!("Link watcher subscribed to netlink multicast groups");
 
     // Process link change events
     while let Some((message, _)) = messages.next().await {
@@ -225,26 +258,30 @@ pub async fn watch_links(handle: Handle, state: Arc<RwLock<NetworkState>>) -> Re
 
         debug!("Link {} event on interface {}", event_type, ifindex);
 
-        // For link additions, refresh our link list
+        // For link additions, extract link name from the message and update state
         if event_type == "new" {
-            match crate::network::link::acquire_links(&mut *state.write().await, &handle).await {
-                Ok(_) => {
-                    let link_name = {
-                        let state_read = state.read().await;
-                        state_read.get_link_name(ifindex).cloned().unwrap_or_default()
-                    };
-                    info!("Link added: {} ({})", link_name, ifindex);
+            use netlink_packet_route::link::LinkAttribute;
+            let link_name = msg.attributes.iter().find_map(|attr| {
+                if let LinkAttribute::IfName(name) = attr {
+                    Some(name.clone())
+                } else {
+                    None
                 }
-                Err(e) => {
-                    warn!("Failed to refresh link list after add: {}", e);
-                }
+            });
+            if let Some(name) = link_name {
+                info!("Link added: {} ({})", name, ifindex);
+                state.write().await.add_link(name, ifindex);
+            } else {
+                debug!("Link added with ifindex {} but no name in attributes", ifindex);
             }
         }
 
         // For link deletions, clean up our state
         if event_type == "del" {
-            info!("Link removed: interface {}", ifindex);
-            // State cleanup happens automatically via NetworkState methods
+            let mut state_write = state.write().await;
+            let link_name = state_write.get_link_name(ifindex).cloned().unwrap_or_default();
+            info!("Link removed: {} ({})", link_name, ifindex);
+            state_write.remove_link(ifindex);
         }
     }
 
@@ -314,15 +351,14 @@ async fn drop_configuration(
 ) -> Result<()> {
     let table = calculate_table_id(ifindex);
 
-    // Get addresses that need to be cleaned up
+    // Get addresses that need to be cleaned up (deduplicated)
     let addresses_to_clean: Vec<IpAddr> = {
         let state_read = state.read().await;
-        state_read
+        let addrs: HashSet<IpAddr> = state_read
             .routing_rules_from
             .keys()
             .chain(state_read.routing_rules_to.keys())
             .filter(|addr| {
-                // Find rules associated with this table
                 state_read
                     .routing_rules_from
                     .get(addr)
@@ -335,7 +371,8 @@ async fn drop_configuration(
                         .unwrap_or(false)
             })
             .copied()
-            .collect()
+            .collect();
+        addrs.into_iter().collect()
     };
 
     // Remove routing rules

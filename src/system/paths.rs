@@ -11,6 +11,10 @@ pub const SYSTEMD_NETIF_LINKS: &str = "/run/systemd/netif/links";
 pub const SYSTEMD_NETIF_STATE: &str = "/run/systemd/netif/state";
 
 pub fn get_script_dir(state: &str) -> String {
+    if !crate::system::validation::validate_state_name(state) {
+        tracing::warn!("Rejected invalid state name for script directory: {}", state);
+        return String::new();
+    }
     PathBuf::from(CONFIG_DIR)
         .join(format!("{}.d", state))
         .to_string_lossy()

@@ -33,21 +33,24 @@ const DEFAULT_USER: &str = "netevd";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging first
+    // Parse configuration first (before logging init so we can apply log level)
+    let config = Config::parse().context("Failed to parse configuration")?;
+
+    // Apply config log level if RUST_LOG is not already set
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", &config.system.log_level);
+    }
+
+    // Initialize logging with the resolved level
     init_logging();
 
     info!("Starting netevd - Network Event Daemon");
     info!("Version: {}", env!("CARGO_PKG_VERSION"));
 
-    // Parse configuration
-    let config = Config::parse().context("Failed to parse configuration")?;
     info!(
         "Configuration loaded: backend={}, log_level={}",
         config.system.backend, config.system.log_level
     );
-
-    // Update logging level based on config
-    update_log_level(&config.system.log_level);
 
     // Initialize metrics if enabled
     let metrics: Option<MetricsHandle> = if config.metrics.enabled {
@@ -166,21 +169,6 @@ fn init_logging() {
         .with_target(false)
         .with_thread_ids(false)
         .init();
-}
-
-/// Update logging level based on configuration
-fn update_log_level(level: &str) {
-    // Note: Dynamically updating log level requires using a reload handle
-    // For now, we rely on RUST_LOG environment variable
-    // TODO: Implement dynamic log level updates if needed
-    match level {
-        "trace" | "debug" | "info" | "warn" | "error" => {
-            // Valid log level, would be applied if we had reload handle
-        }
-        _ => {
-            warn!("Invalid log level '{}', using default", level);
-        }
-    }
 }
 
 /// Spawn the appropriate listener based on the configured backend

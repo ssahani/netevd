@@ -20,11 +20,33 @@ use crate::network::{address::get_all_addresses, NetworkState};
 use crate::system::execute;
 use crate::system::paths::get_script_dir;
 
-use super::api::{is_link_routable, parse_link_state_file};
+use super::api::parse_link_state_file;
 use super::json::build_link_describe_json;
 
-const NETWORKD_SERVICE: &str = "org.freedesktop.network1";
-const NETWORKD_PATH: &str = "/org/freedesktop/network1";
+const NETWORKD_LINK_PREFIX: &str = "/org/freedesktop/network1/link/";
+
+/// Decode a systemd-networkd DBus link path to extract the ifindex.
+/// systemd-networkd encodes the ifindex as a decimal string where each
+/// character is represented as _XX (hex of ASCII code).
+/// e.g. ifindex 2 -> "_32", ifindex 12 -> "_31_32"
+fn decode_networkd_ifindex(path: &str) -> Option<u32> {
+    let encoded = path.strip_prefix(NETWORKD_LINK_PREFIX)?;
+    let mut decoded = String::new();
+    let mut chars = encoded.chars();
+    while let Some(c) = chars.next() {
+        if c == '_' {
+            let hex: String = chars.by_ref().take(2).collect();
+            if hex.len() != 2 {
+                return None;
+            }
+            let byte = u8::from_str_radix(&hex, 16).ok()?;
+            decoded.push(byte as char);
+        } else {
+            decoded.push(c);
+        }
+    }
+    decoded.parse().ok()
+}
 
 /// Start systemd-networkd DBus listener
 pub async fn listen_networkd(
@@ -52,24 +74,21 @@ pub async fn listen_networkd(
             let signal = msg.header();
             if signal.member().map(|m| m.as_str()) == Some("PropertiesChanged") {
                 if let Some(path) = signal.path().map(|p| p.as_str()) {
-                    // Check if this is a link signal: /org/freedesktop/network1/link/_3{ifindex}
-                    if path.starts_with("/org/freedesktop/network1/link/_3") {
-                        // Extract ifindex from path
-                        if let Some(ifindex_str) = path.strip_prefix("/org/freedesktop/network1/link/_3") {
-                            if let Ok(ifindex) = ifindex_str.parse::<u32>() {
-                                if let Err(e) = handle_link_signal(
-                                    &config,
-                                    &handle,
-                                    &state,
-                                    ifindex,
-                                    &mut last_states,
-                                    &metrics,
-                                    &audit,
-                                )
-                                .await
-                                {
-                                    warn!("Error handling link signal for ifindex {}: {}", ifindex, e);
-                                }
+                    // Check if this is a link signal from networkd
+                    if path.starts_with(NETWORKD_LINK_PREFIX) {
+                        if let Some(ifindex) = decode_networkd_ifindex(path) {
+                            if let Err(e) = handle_link_signal(
+                                &config,
+                                &handle,
+                                &state,
+                                ifindex,
+                                &mut last_states,
+                                &metrics,
+                                &audit,
+                            )
+                            .await
+                            {
+                                warn!("Error handling link signal for ifindex {}: {}", ifindex, e);
                             }
                         }
                     }
@@ -146,17 +165,21 @@ async fn handle_link_signal(
         .unwrap_or_default();
     let address_strings: Vec<String> = addresses.iter().map(|a| a.to_string()).collect();
 
-    // Build JSON if enabled
-    if config.get_emit_json() {
+    // Build JSON once if enabled, reuse for logging and env var
+    let json_value = if config.get_emit_json() {
         match build_link_describe_json(ifindex, link_name.clone(), &link_state, address_strings.clone()) {
             Ok(json) => {
                 debug!("Link describe JSON: {}", json);
+                Some(json)
             }
             Err(e) => {
                 warn!("Failed to build link describe JSON: {}", e);
+                None
             }
         }
-    }
+    } else {
+        None
+    };
 
     // Handle systemd-resolved integration
     if config.get_use_dns() && !link_state.dns.is_empty() {
@@ -175,8 +198,12 @@ async fn handle_link_signal(
     if config.get_use_hostname() {
         // Try to extract hostname from domains
         if let Some(hostname) = link_state.domains.first() {
-            if let Err(e) = hostnamed::set_static_hostname(hostname).await {
-                warn!("Failed to set hostname: {}", e);
+            if crate::system::validation::validate_hostname(hostname) {
+                if let Err(e) = hostnamed::set_static_hostname(hostname).await {
+                    warn!("Failed to set hostname: {}", e);
+                }
+            } else {
+                warn!("Rejected invalid hostname from DHCP: {}", hostname);
             }
         }
     }
@@ -195,7 +222,7 @@ async fn handle_link_signal(
             event_type: current_state.clone(),
             backend: "systemd-networkd".to_string(),
             addresses: addresses.clone(),
-            has_gateway: is_link_routable(ifindex),
+            has_gateway: link_state.oper_state == "routable",
             dns_servers: link_state.dns.iter()
                 .filter_map(|s| s.parse().ok())
                 .collect(),
@@ -212,12 +239,10 @@ async fn handle_link_signal(
             env_vars.insert("BACKEND".to_string(), "systemd-networkd".to_string());
             env_vars.insert("ADDRESSES".to_string(), address_strings.join(" "));
 
-            // Add JSON if enabled
-            if config.get_emit_json() {
-                if let Ok(json) = build_link_describe_json(ifindex, link_name.clone(), &link_state, address_strings.clone()) {
-                    if let Ok(json_str) = serde_json::to_string(&json) {
-                        env_vars.insert("JSON".to_string(), json_str);
-                    }
+            // Add JSON if enabled (reuse pre-built value)
+            if let Some(ref json) = json_value {
+                if let Ok(json_str) = serde_json::to_string(json) {
+                    env_vars.insert("JSON".to_string(), json_str);
                 }
             }
 
@@ -230,7 +255,7 @@ async fn handle_link_signal(
     }
 
     // Handle routing policy rules for routable state
-    if is_link_routable(ifindex) {
+    if link_state.oper_state == "routable" {
         let routing_policy_interfaces = config.routing.get_routing_policy_interfaces();
         if routing_policy_interfaces.contains(&link_name) {
             info!(

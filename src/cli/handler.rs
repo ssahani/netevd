@@ -1,6 +1,6 @@
 use crate::cli::{Cli, Commands, ListResource, OutputFormat, ShowResource};
 use crate::config::Config;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::path::Path;
 
 pub async fn handle_command(cli: Cli) -> Result<()> {
@@ -160,7 +160,7 @@ async fn handle_reload(endpoint: &str) -> Result<()> {
 fn handle_validate(config_path: &Path) -> Result<()> {
     println!("Validating configuration file: {}", config_path.display());
 
-    match Config::parse_from_path(config_path.to_str().unwrap()) {
+    match Config::parse_from_path(&config_path.to_string_lossy()) {
         Ok(config) => {
             println!("✓ Configuration is valid");
             println!("\nConfiguration summary:");
@@ -211,7 +211,6 @@ fn handle_version(detailed: bool) -> Result<()> {
     if detailed {
         println!("\nBuild information:");
         println!("  Compiler: rustc");
-        println!("  Build date: {}", chrono::Utc::now().format("%Y-%m-%d"));
         println!("\nFeatures:");
         println!("  - systemd-networkd support");
         println!("  - NetworkManager support");

@@ -99,25 +99,41 @@ pub async fn add_route(
     Ok(())
 }
 
-/// Remove a route from a custom routing table
+/// Remove a route from a custom routing table (both IPv4 and IPv6)
 pub async fn remove_route(handle: &Handle, ifindex: u32, table: u32) -> Result<()> {
     info!("Removing routes for ifindex={} in table={}", ifindex, table);
 
-    // Get all routes in the specified table
-    let mut routes = handle.route().get(rtnetlink::IpVersion::V4).execute();
-
     let mut removed = false;
+
+    // Remove IPv4 routes
+    let mut routes = handle.route().get(rtnetlink::IpVersion::V4).execute();
     while let Some(route) = routes
         .try_next()
         .await
-        .context("Failed to get next route")?
+        .context("Failed to get next IPv4 route")?
     {
         if route_in_table(&route, table) && route_matches_interface(&route, ifindex) {
-            // Delete this route
             if let Err(e) = handle.route().del(route).execute().await {
-                warn!("Failed to delete route: {}", e);
+                warn!("Failed to delete IPv4 route: {}", e);
             } else {
-                debug!("Deleted route in table {}", table);
+                debug!("Deleted IPv4 route in table {}", table);
+                removed = true;
+            }
+        }
+    }
+
+    // Remove IPv6 routes
+    let mut routes_v6 = handle.route().get(rtnetlink::IpVersion::V6).execute();
+    while let Some(route) = routes_v6
+        .try_next()
+        .await
+        .context("Failed to get next IPv6 route")?
+    {
+        if route_in_table(&route, table) && route_matches_interface(&route, ifindex) {
+            if let Err(e) = handle.route().del(route).execute().await {
+                warn!("Failed to delete IPv6 route: {}", e);
+            } else {
+                debug!("Deleted IPv6 route in table {}", table);
                 removed = true;
             }
         }

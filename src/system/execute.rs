@@ -11,9 +11,12 @@ use std::collections::HashMap;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Stdio;
+use std::time::Duration;
 use tokio::fs;
 use tokio::process::Command;
 use tracing::{debug, info, warn};
+
+const SCRIPT_TIMEOUT: Duration = Duration::from_secs(30);
 
 use crate::system::validation;
 
@@ -101,6 +104,10 @@ async fn execute_script(script_path: &Path, env_vars: &HashMap<String, String>) 
 
     let mut cmd = Command::new(script_path);
 
+    // Start with a clean environment to prevent leaking daemon env vars
+    cmd.env_clear();
+    cmd.env("PATH", "/usr/sbin:/usr/bin:/sbin:/bin");
+
     // Validate and set environment variables
     // This is defense-in-depth: even though scripts should quote variables,
     // we prevent passing potentially malicious data
@@ -145,10 +152,10 @@ async fn execute_script(script_path: &Path, env_vars: &HashMap<String, String>) 
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    // Execute the command
-    let output = cmd
-        .output()
+    // Execute the command with timeout
+    let output = tokio::time::timeout(SCRIPT_TIMEOUT, cmd.output())
         .await
+        .map_err(|_| anyhow::anyhow!("Script {:?} timed out after {}s", script_path, SCRIPT_TIMEOUT.as_secs()))?
         .with_context(|| format!("Failed to execute script: {:?}", script_path))?;
 
     // Log output

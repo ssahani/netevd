@@ -3,7 +3,7 @@
 //! systemd-networkd state file parsing
 
 use anyhow::Result;
-use configparser::ini::Ini;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing::debug;
 
@@ -37,6 +37,24 @@ pub struct ManagerState {
     pub online_state: String,
 }
 
+/// Parse a flat KEY=VALUE file into a HashMap
+fn parse_key_value_file(path: &std::path::Path) -> Result<HashMap<String, String>> {
+    let contents = std::fs::read_to_string(path)
+        .map_err(|e| anyhow::anyhow!("Failed to read file {:?}: {}", path, e))?;
+
+    let mut kv = HashMap::new();
+    for line in contents.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=') {
+            kv.insert(key.to_string(), value.to_string());
+        }
+    }
+    Ok(kv)
+}
+
 /// Parse link state file from systemd-networkd
 pub fn parse_link_state_file(ifindex: u32) -> Result<LinkState> {
     let path = PathBuf::from(SYSTEMD_NETIF_LINKS).join(ifindex.to_string());
@@ -46,39 +64,31 @@ pub fn parse_link_state_file(ifindex: u32) -> Result<LinkState> {
         return Ok(LinkState::default());
     }
 
-    let mut conf = Ini::new();
-    conf.load(&path)
-        .map_err(|e| anyhow::anyhow!("Failed to parse link state file {:?}: {}", path, e))?;
+    let kv = parse_key_value_file(&path)?;
 
     let mut state = LinkState::default();
 
-    // Parse various sections
-    state.admin_state = conf.get("ADMIN_STATE", "AdminState").unwrap_or_default();
+    state.admin_state = kv.get("ADMIN_STATE").cloned().unwrap_or_default();
+    state.oper_state = kv.get("OPER_STATE").cloned().unwrap_or_default();
+    state.carrier_state = kv.get("CARRIER_STATE").cloned().unwrap_or_default();
+    state.address_state = kv.get("ADDRESS_STATE").cloned().unwrap_or_default();
+    state.ipv4_address_state = kv.get("IPV4_ADDRESS_STATE").cloned().unwrap_or_default();
+    state.ipv6_address_state = kv.get("IPV6_ADDRESS_STATE").cloned().unwrap_or_default();
+    state.online_state = kv.get("ONLINE_STATE").cloned().unwrap_or_default();
 
-    state.oper_state = conf.get("OPER_STATE", "OperationalState").unwrap_or_default();
-    state.carrier_state = conf.get("OPER_STATE", "CarrierState").unwrap_or_default();
-    state.address_state = conf.get("OPER_STATE", "AddressState").unwrap_or_default();
-    state.ipv4_address_state = conf.get("OPER_STATE", "IPv4AddressState").unwrap_or_default();
-    state.ipv6_address_state = conf.get("OPER_STATE", "IPv6AddressState").unwrap_or_default();
-    state.online_state = conf.get("OPER_STATE", "OnlineState").unwrap_or_default();
-
-    // Parse DNS servers (configparser doesn't easily iterate, so check common indices)
-    for i in 0..10 {
-        if let Some(dns) = conf.get("DNS", &format!("DNS{}", i)) {
-            state.dns.push(dns);
-        }
+    // Parse DNS servers (space-separated on a single line)
+    if let Some(dns_str) = kv.get("DNS") {
+        state.dns = dns_str.split_whitespace().map(|s| s.to_string()).collect();
     }
 
-    // Parse domains
-    for i in 0..10 {
-        if let Some(domain) = conf.get("DOMAINS", &format!("Domain{}", i)) {
-            state.domains.push(domain);
-        }
+    // Parse domains (space-separated on a single line)
+    if let Some(domains_str) = kv.get("DOMAINS") {
+        state.domains = domains_str.split_whitespace().map(|s| s.to_string()).collect();
     }
 
-    // Parse routes/gateways
-    state.gateway = conf.get("ROUTE", "Gateway");
-    state.gateway6 = conf.get("ROUTE", "Gateway6");
+    // Parse gateways
+    state.gateway = kv.get("GATEWAY").cloned().filter(|s| !s.is_empty());
+    state.gateway6 = kv.get("GATEWAY6").cloned().filter(|s| !s.is_empty());
 
     debug!("Parsed link state for ifindex {}: {:?}", ifindex, state);
     Ok(state)
@@ -93,18 +103,16 @@ pub fn parse_manager_state_file() -> Result<ManagerState> {
         return Ok(ManagerState::default());
     }
 
-    let mut conf = Ini::new();
-    conf.load(&path)
-        .map_err(|e| anyhow::anyhow!("Failed to parse manager state file {:?}: {}", path, e))?;
+    let kv = parse_key_value_file(&path)?;
 
     let mut state = ManagerState::default();
 
-    state.operational_state = conf.get("MANAGER_STATE", "OperationalState").unwrap_or_default();
-    state.carrier_state = conf.get("MANAGER_STATE", "CarrierState").unwrap_or_default();
-    state.address_state = conf.get("MANAGER_STATE", "AddressState").unwrap_or_default();
-    state.ipv4_address_state = conf.get("MANAGER_STATE", "IPv4AddressState").unwrap_or_default();
-    state.ipv6_address_state = conf.get("MANAGER_STATE", "IPv6AddressState").unwrap_or_default();
-    state.online_state = conf.get("MANAGER_STATE", "OnlineState").unwrap_or_default();
+    state.operational_state = kv.get("OPER_STATE").cloned().unwrap_or_default();
+    state.carrier_state = kv.get("CARRIER_STATE").cloned().unwrap_or_default();
+    state.address_state = kv.get("ADDRESS_STATE").cloned().unwrap_or_default();
+    state.ipv4_address_state = kv.get("IPV4_ADDRESS_STATE").cloned().unwrap_or_default();
+    state.ipv6_address_state = kv.get("IPV6_ADDRESS_STATE").cloned().unwrap_or_default();
+    state.online_state = kv.get("ONLINE_STATE").cloned().unwrap_or_default();
 
     debug!("Parsed manager state: {:?}", state);
     Ok(state)

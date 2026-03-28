@@ -112,12 +112,16 @@ impl Filter {
             }
         }
 
-        // Check interface pattern match
+        // Check interface pattern match (escape regex metacharacters, anchor pattern)
         if let Some(ref pattern) = self.match_rule.interface_pattern {
-            if let Ok(regex) = Regex::new(&pattern.replace("*", ".*")) {
+            let escaped = regex::escape(pattern).replace(r"\*", ".*");
+            if let Ok(regex) = Regex::new(&format!("^{}$", escaped)) {
                 if !regex.is_match(&event.interface) {
                     return false;
                 }
+            } else {
+                tracing::warn!("Invalid interface pattern: {}", pattern);
+                return false;
             }
         }
 
@@ -163,27 +167,47 @@ impl Filter {
     }
 
     fn evaluate_condition(&self, condition: &str, event: &NetworkEvent) -> bool {
-        // Simple condition evaluator
-        // Supports: has_gateway, dns_count > N, interface == "name"
+        // Handle compound conditions with && and ||
+        if condition.contains("&&") {
+            return condition
+                .split("&&")
+                .all(|sub| self.evaluate_single_condition(sub.trim(), event));
+        }
+        if condition.contains("||") {
+            return condition
+                .split("||")
+                .any(|sub| self.evaluate_single_condition(sub.trim(), event));
+        }
+        self.evaluate_single_condition(condition.trim(), event)
+    }
 
-        if condition.contains("has_gateway") {
+    fn evaluate_single_condition(&self, condition: &str, event: &NetworkEvent) -> bool {
+        if condition == "has_gateway" {
             return event.has_gateway;
         }
 
-        if condition.contains("dns_count") {
-            if let Some(pos) = condition.find('>') {
+        if condition.starts_with("dns_count") {
+            // Handle >=, <=, >, <
+            if let Some(pos) = condition.find(">=") {
+                if let Ok(threshold) = condition[pos + 2..].trim().parse::<usize>() {
+                    return event.dns_servers.len() >= threshold;
+                }
+            } else if let Some(pos) = condition.find("<=") {
+                if let Ok(threshold) = condition[pos + 2..].trim().parse::<usize>() {
+                    return event.dns_servers.len() <= threshold;
+                }
+            } else if let Some(pos) = condition.find('>') {
                 if let Ok(threshold) = condition[pos + 1..].trim().parse::<usize>() {
                     return event.dns_servers.len() > threshold;
                 }
-            }
-            if let Some(pos) = condition.find('<') {
+            } else if let Some(pos) = condition.find('<') {
                 if let Ok(threshold) = condition[pos + 1..].trim().parse::<usize>() {
                     return event.dns_servers.len() < threshold;
                 }
             }
         }
 
-        if condition.contains("interface ==") {
+        if condition.starts_with("interface ==") || condition.starts_with("interface=") {
             if let Some(start) = condition.find('"') {
                 if let Some(end) = condition[start + 1..].find('"') {
                     let iface = &condition[start + 1..start + 1 + end];
@@ -192,7 +216,7 @@ impl Filter {
             }
         }
 
-        // Default: condition not recognized, return true
+        // Default: unrecognized condition, return true
         true
     }
 }

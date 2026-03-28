@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
@@ -50,7 +52,9 @@ impl AuditLogger {
 
         // Ensure directory exists
         if let Some(parent) = log_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                tracing::warn!("Failed to create audit log directory {:?}: {}", parent, e);
+            }
         }
 
         Self { log_path, enabled }
@@ -70,6 +74,7 @@ impl AuditLogger {
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
+            .mode(0o600)
             .open(&self.log_path)?;
 
         let json = serde_json::to_string(event)?;
@@ -167,6 +172,8 @@ impl AuditLogger {
             AuditResult::Failure
         };
 
+        let actor = source_ip.as_deref().unwrap_or("unknown").to_string();
+
         let details = serde_json::json!({
             "method": method,
             "path": path,
@@ -178,7 +185,7 @@ impl AuditLogger {
             id: Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
             event_type: AuditEventType::ApiRequest,
-            actor: source_ip.unwrap_or_else(|| "unknown".to_string()),
+            actor,
             action: format!("{} {}", method, path),
             resource: path.to_string(),
             result,

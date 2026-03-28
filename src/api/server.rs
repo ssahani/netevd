@@ -2,10 +2,11 @@ use crate::api::handlers::AppState;
 use crate::api::routes::create_api_routes;
 use crate::network::NetworkState;
 use anyhow::Result;
+use axum::http::{HeaderValue, Method};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
 pub struct ApiServer {
@@ -21,9 +22,12 @@ impl ApiServer {
 
     pub async fn run(self) -> Result<()> {
         let cors = CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any);
+            .allow_origin([
+                "http://127.0.0.1".parse::<HeaderValue>().unwrap(),
+                "http://localhost".parse::<HeaderValue>().unwrap(),
+            ])
+            .allow_methods([Method::GET, Method::POST])
+            .allow_headers([axum::http::header::CONTENT_TYPE]);
 
         let app = create_api_routes(self.state)
             .layer(cors)

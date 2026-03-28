@@ -91,9 +91,9 @@ system:
     assert!(!config.get_use_hostname()); // Default is false
 }
 
-/// Test environment variable overrides
+/// Test config loads correctly from file
 #[test]
-fn test_env_var_override() {
+fn test_config_from_file() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("netevd.yaml");
 
@@ -105,19 +105,10 @@ system:
 
     fs::write(&config_path, config_content).unwrap();
 
-    // Set environment variable
-    std::env::set_var("NETEVD_BACKEND", "NetworkManager");
-    std::env::set_var("NETEVD_LOG_LEVEL", "debug");
-
     let config = netevd::config::Config::parse_from_path(config_path.to_str().unwrap()).unwrap();
 
-    // Note: Environment variable override is not yet implemented
-    // For now, just verify the config loads
     assert_eq!(config.system.backend, "systemd-networkd");
-
-    // Cleanup
-    std::env::remove_var("NETEVD_BACKEND");
-    std::env::remove_var("NETEVD_LOG_LEVEL");
+    assert_eq!(config.system.log_level, "info");
 }
 
 /// Test network state initialization

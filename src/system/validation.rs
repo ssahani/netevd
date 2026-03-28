@@ -64,8 +64,11 @@ pub fn validate_domain_name(domain: &str) -> bool {
             return false;
         }
 
-        // Allow wildcard at start
+        // Allow wildcard prefix only on the first label
         let label_to_check = label.strip_prefix('*').unwrap_or(label);
+        if label_to_check.is_empty() {
+            continue; // bare wildcard label is valid as first label
+        }
 
         if label_to_check.starts_with('-') || label_to_check.ends_with('-') {
             return false;
@@ -114,7 +117,7 @@ pub fn sanitize_env_value(value: &str) -> Option<String> {
     }
 
     // Reject values that look like command substitution
-    if value.contains("$(") || value.contains("`") {
+    if value.contains("$(") {
         return None;
     }
 

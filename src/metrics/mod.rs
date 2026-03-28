@@ -1,5 +1,5 @@
 use prometheus::{
-    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, Opts, Registry,
+    Counter, CounterVec, Gauge, HistogramOpts, HistogramVec, Opts, Registry,
 };
 use std::sync::Arc;
 
@@ -171,8 +171,11 @@ impl Metrics {
         let encoder = prometheus::TextEncoder::new();
         let metric_families = self.registry.gather();
         let mut buffer = vec![];
-        encoder.encode(&metric_families, &mut buffer).unwrap();
-        String::from_utf8(buffer).unwrap()
+        if let Err(e) = encoder.encode(&metric_families, &mut buffer) {
+            tracing::error!("Failed to encode metrics: {}", e);
+            return String::new();
+        }
+        String::from_utf8(buffer).unwrap_or_default()
     }
 }
 

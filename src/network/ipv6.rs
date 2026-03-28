@@ -1,13 +1,7 @@
 use anyhow::Result;
 use rtnetlink::Handle;
 use std::net::Ipv6Addr;
-use tracing::{debug, error, info};
-
-/// IPv6 Policy Routing Support
-///
-/// This module handles IPv6-specific routing policy rules and source address selection
-
-const IPV6_RULE_PRIORITY_BASE: u32 = 32765;
+use tracing::{debug, info};
 
 /// Add IPv6 routing policy rule for source-based routing
 /// Note: Currently a placeholder - full implementation requires rtnetlink API updates
