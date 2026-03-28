@@ -62,7 +62,18 @@ pub async fn listen_networkd(
         .await
         .context("Failed to connect to system bus")?;
 
-    // Subscribe to PropertiesChanged signals from networkd
+    // Subscribe only to PropertiesChanged signals from networkd link paths
+    let rule = zbus::MatchRule::builder()
+        .msg_type(zbus::message::Type::Signal)
+        .interface("org.freedesktop.DBus.Properties")
+        .map_err(|e| anyhow::anyhow!("Failed to build match rule: {}", e))?
+        .member("PropertiesChanged")
+        .map_err(|e| anyhow::anyhow!("Failed to build match rule: {}", e))?
+        .path_namespace("/org/freedesktop/network1/link")
+        .map_err(|e| anyhow::anyhow!("Failed to build match rule: {}", e))?
+        .build();
+    let proxy = zbus::fdo::DBusProxy::new(&connection).await?;
+    proxy.add_match_rule(rule).await?;
     let mut stream = zbus::MessageStream::from(&connection);
 
     // Track last seen state for each interface to avoid duplicate processing

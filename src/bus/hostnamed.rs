@@ -18,11 +18,8 @@ pub async fn set_static_hostname(hostname: &str) -> Result<()> {
 
     info!("Setting static hostname to: {}", hostname);
 
-    let connection = Connection::system()
-        .await
-        .context("Failed to connect to system bus")?;
+    let connection = get_system_bus().await?;
 
-    // Call SetStaticHostname method
     let proxy = zbus::Proxy::new(
         &connection,
         HOSTNAMED_SERVICE,
@@ -32,7 +29,6 @@ pub async fn set_static_hostname(hostname: &str) -> Result<()> {
     .await
     .context("Failed to create hostnamed proxy")?;
 
-    // SetStaticHostname(hostname: String, interactive: bool)
     proxy
         .call_method("SetStaticHostname", &(hostname, false))
         .await
@@ -40,4 +36,26 @@ pub async fn set_static_hostname(hostname: &str) -> Result<()> {
 
     info!("Successfully set static hostname to: {}", hostname);
     Ok(())
+}
+
+/// Get or create a cached system bus connection
+async fn get_system_bus() -> Result<Connection> {
+    use std::sync::OnceLock;
+    use tokio::sync::Mutex;
+
+    static BUS: OnceLock<Mutex<Option<Connection>>> = OnceLock::new();
+    let lock = BUS.get_or_init(|| Mutex::new(None));
+    let mut guard = lock.lock().await;
+
+    if let Some(ref conn) = *guard {
+        if conn.is_bus() {
+            return Ok(conn.clone());
+        }
+    }
+
+    let conn = Connection::system()
+        .await
+        .context("Failed to connect to system bus")?;
+    *guard = Some(conn.clone());
+    Ok(conn)
 }

@@ -51,7 +51,18 @@ pub async fn listen_networkmanager(
         .await
         .context("Failed to connect to system bus")?;
 
-    // Subscribe to StateChanged signals from NetworkManager
+    // Subscribe only to StateChanged signals from NetworkManager device paths
+    let rule = zbus::MatchRule::builder()
+        .msg_type(zbus::message::Type::Signal)
+        .interface("org.freedesktop.NetworkManager.Device")
+        .map_err(|e| anyhow::anyhow!("Failed to build match rule: {}", e))?
+        .member("StateChanged")
+        .map_err(|e| anyhow::anyhow!("Failed to build match rule: {}", e))?
+        .path_namespace("/org/freedesktop/NetworkManager/Devices")
+        .map_err(|e| anyhow::anyhow!("Failed to build match rule: {}", e))?
+        .build();
+    let proxy = zbus::fdo::DBusProxy::new(&connection).await?;
+    proxy.add_match_rule(rule).await?;
     let mut stream = zbus::MessageStream::from(&connection);
 
     // Track last seen state for each device

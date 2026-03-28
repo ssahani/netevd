@@ -52,6 +52,7 @@ async fn main() -> Result<()> {
         match Metrics::new() {
             Ok(m) => {
                 let metrics_handle = Arc::new(m);
+                metrics::set_global_metrics(metrics_handle.clone());
                 info!("Metrics collection enabled on port {}", config.metrics.port);
                 Some(metrics_handle)
             }

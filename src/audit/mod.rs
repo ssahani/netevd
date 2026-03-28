@@ -1,9 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::fs::OpenOptions;
-use std::io::Write;
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use uuid::Uuid;
 
 const DEFAULT_AUDIT_LOG_PATH: &str = "/var/log/netevd/audit.log";
@@ -43,6 +44,7 @@ pub enum AuditResult {
 pub struct AuditLogger {
     log_path: PathBuf,
     enabled: bool,
+    writer: Mutex<Option<BufWriter<File>>>,
 }
 
 impl AuditLogger {
@@ -56,7 +58,29 @@ impl AuditLogger {
             }
         }
 
-        Self { log_path, enabled }
+        // Open the file handle once at startup
+        let writer = if enabled {
+            match OpenOptions::new()
+                .create(true)
+                .append(true)
+                .mode(0o600)
+                .open(&log_path)
+            {
+                Ok(file) => Some(BufWriter::new(file)),
+                Err(e) => {
+                    tracing::warn!("Failed to open audit log {:?}: {}", log_path, e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        Self {
+            log_path,
+            enabled,
+            writer: Mutex::new(writer),
+        }
     }
 
     pub fn log(&self, event: AuditLog) {
@@ -70,14 +94,23 @@ impl AuditLogger {
     }
 
     fn write_log(&self, event: &AuditLog) -> std::io::Result<()> {
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .mode(0o600)
-            .open(&self.log_path)?;
+        let mut guard = self.writer.lock().unwrap();
 
-        let json = serde_json::to_string(event)?;
-        writeln!(file, "{}", json)?;
+        // Lazily open if not yet open (e.g., initial open failed, retry)
+        if guard.is_none() {
+            let file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .mode(0o600)
+                .open(&self.log_path)?;
+            *guard = Some(BufWriter::new(file));
+        }
+
+        if let Some(ref mut writer) = *guard {
+            let json = serde_json::to_string(event)?;
+            writeln!(writer, "{}", json)?;
+            writer.flush()?;
+        }
 
         Ok(())
     }

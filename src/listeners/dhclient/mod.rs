@@ -81,30 +81,31 @@ pub async fn watch_lease_file(
         }
     }
 
-    // Debounce timer to avoid processing rapid successive changes
-    let mut debounce_timer = time::interval(DEBOUNCE_DURATION);
-    debounce_timer.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+    // Debounce: only process after DEBOUNCE_DURATION of quiet since last event
+    let debounce_sleep = tokio::time::sleep(DEBOUNCE_DURATION);
+    tokio::pin!(debounce_sleep);
     let mut pending_update = false;
 
     loop {
         tokio::select! {
             Some(event) = rx.recv() => {
-                // Check if the event is for our lease file
                 let lease_path = std::path::Path::new(DHCLIENT_LEASE_FILE);
                 let is_lease_file = event.paths.iter().any(|p| p == lease_path);
 
                 if is_lease_file {
                     debug!("Lease file modified: {:?}", event.kind);
                     pending_update = true;
+                    // Reset debounce timer on each new event
+                    debounce_sleep.as_mut().reset(tokio::time::Instant::now() + DEBOUNCE_DURATION);
                 }
             }
-            _ = debounce_timer.tick() => {
-                if pending_update {
-                    pending_update = false;
-                    if let Err(e) = process_lease_file(&config, &handle, &state, &metrics, &audit).await {
-                        warn!("Failed to process lease file: {}", e);
-                    }
+            () = &mut debounce_sleep, if pending_update => {
+                pending_update = false;
+                if let Err(e) = process_lease_file(&config, &handle, &state, &metrics, &audit).await {
+                    warn!("Failed to process lease file: {}", e);
                 }
+                // Reset for next event
+                debounce_sleep.as_mut().reset(tokio::time::Instant::now() + DEBOUNCE_DURATION);
             }
         }
     }

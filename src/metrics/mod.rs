@@ -186,3 +186,17 @@ impl Default for Metrics {
 }
 
 pub type MetricsHandle = Arc<Metrics>;
+
+use std::sync::OnceLock;
+
+static GLOBAL_METRICS: OnceLock<MetricsHandle> = OnceLock::new();
+
+/// Register a metrics handle globally so the API handler can access it
+pub fn set_global_metrics(handle: MetricsHandle) {
+    let _ = GLOBAL_METRICS.set(handle);
+}
+
+/// Get the global metrics handle (returns None if metrics are disabled)
+pub fn get_global_metrics() -> Option<&'static MetricsHandle> {
+    GLOBAL_METRICS.get()
+}

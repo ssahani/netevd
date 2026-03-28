@@ -14,7 +14,16 @@ use tempfile::TempDir;
 use tokio::time::sleep;
 
 const TEST_INTERFACE: &str = "dummy-test0";
-const TEST_SCRIPT_OUTPUT: &str = "/tmp/netevd-test-output.txt";
+
+/// Get a temporary file path for test script output (avoids shared /tmp files)
+fn test_output_path() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join("netevd-tests");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join(format!(
+        "output-{}.txt",
+        std::process::id(),
+    ))
+}
 
 /// Helper to check if running as root
 fn is_root() -> bool {
@@ -229,14 +238,14 @@ echo "CARRIER: $LINK" >> {}
 echo "STATE: $STATE" >> {}
 echo "BACKEND: $BACKEND" >> {}
 "#,
-        TEST_SCRIPT_OUTPUT, TEST_SCRIPT_OUTPUT, TEST_SCRIPT_OUTPUT
+        &test_output_path().to_str().unwrap(), &test_output_path().to_str().unwrap(), &test_output_path().to_str().unwrap()
     );
 
     create_test_script(&carrier_dir, "01-test.sh", &script_content)
         .expect("Failed to create test script");
 
     // Clean up any existing output file
-    let _ = fs::remove_file(TEST_SCRIPT_OUTPUT);
+    let _ = fs::remove_file(&test_output_path().to_str().unwrap());
 
     // Create dummy interface
     create_dummy_interface(TEST_INTERFACE).expect("Failed to create interface");
@@ -259,8 +268,8 @@ echo "BACKEND: $BACKEND" >> {}
     assert!(output.status.success(), "Script should execute successfully");
 
     // Verify script output
-    if Path::new(TEST_SCRIPT_OUTPUT).exists() {
-        let content = fs::read_to_string(TEST_SCRIPT_OUTPUT)
+    if Path::new(&test_output_path().to_str().unwrap()).exists() {
+        let content = fs::read_to_string(&test_output_path().to_str().unwrap())
             .expect("Failed to read output file");
         assert!(content.contains(TEST_INTERFACE), "Output should contain interface name");
         assert!(content.contains("carrier"), "Output should contain state");
@@ -268,7 +277,7 @@ echo "BACKEND: $BACKEND" >> {}
 
     // Cleanup
     delete_interface(TEST_INTERFACE).expect("Failed to delete interface");
-    let _ = fs::remove_file(TEST_SCRIPT_OUTPUT);
+    let _ = fs::remove_file(&test_output_path().to_str().unwrap());
 }
 
 /// Test routable state with IP address
@@ -291,14 +300,14 @@ async fn test_routable_with_ip() {
 echo "ROUTABLE: $LINK" >> {}
 echo "ADDRESSES: $ADDRESSES" >> {}
 "#,
-        TEST_SCRIPT_OUTPUT, TEST_SCRIPT_OUTPUT
+        &test_output_path().to_str().unwrap(), &test_output_path().to_str().unwrap()
     );
 
     create_test_script(&routable_dir, "01-test.sh", &script_content)
         .expect("Failed to create test script");
 
     // Clean up any existing output file
-    let _ = fs::remove_file(TEST_SCRIPT_OUTPUT);
+    let _ = fs::remove_file(&test_output_path().to_str().unwrap());
 
     // Create dummy interface, bring it up, and add IP
     create_dummy_interface(TEST_INTERFACE).expect("Failed to create interface");
@@ -320,8 +329,8 @@ echo "ADDRESSES: $ADDRESSES" >> {}
     assert!(output.status.success(), "Script should execute successfully");
 
     // Verify output
-    if Path::new(TEST_SCRIPT_OUTPUT).exists() {
-        let content = fs::read_to_string(TEST_SCRIPT_OUTPUT)
+    if Path::new(&test_output_path().to_str().unwrap()).exists() {
+        let content = fs::read_to_string(&test_output_path().to_str().unwrap())
             .expect("Failed to read output file");
         assert!(content.contains(TEST_INTERFACE), "Output should contain interface name");
         assert!(content.contains("10.0.0.1"), "Output should contain IP address");
@@ -329,7 +338,7 @@ echo "ADDRESSES: $ADDRESSES" >> {}
 
     // Cleanup
     delete_interface(TEST_INTERFACE).expect("Failed to delete interface");
-    let _ = fs::remove_file(TEST_SCRIPT_OUTPUT);
+    let _ = fs::remove_file(&test_output_path().to_str().unwrap());
 }
 
 /// Test multiple interface lifecycle
@@ -441,18 +450,18 @@ echo "STATE=$STATE" >> {}
 echo "BACKEND=$BACKEND" >> {}
 echo "ADDRESSES=$ADDRESSES" >> {}
 "#,
-        TEST_SCRIPT_OUTPUT,
-        TEST_SCRIPT_OUTPUT,
-        TEST_SCRIPT_OUTPUT,
-        TEST_SCRIPT_OUTPUT,
-        TEST_SCRIPT_OUTPUT
+        &test_output_path().to_str().unwrap(),
+        &test_output_path().to_str().unwrap(),
+        &test_output_path().to_str().unwrap(),
+        &test_output_path().to_str().unwrap(),
+        &test_output_path().to_str().unwrap()
     );
 
     create_test_script(&script_dir, "01-env-test.sh", &script_content)
         .expect("Failed to create script");
 
     // Clean output file
-    let _ = fs::remove_file(TEST_SCRIPT_OUTPUT);
+    let _ = fs::remove_file(&test_output_path().to_str().unwrap());
 
     // Execute script with test environment
     let output = Command::new("bash")
@@ -468,7 +477,7 @@ echo "ADDRESSES=$ADDRESSES" >> {}
     assert!(output.status.success(), "Script should execute successfully");
 
     // Verify all environment variables were passed
-    let content = fs::read_to_string(TEST_SCRIPT_OUTPUT)
+    let content = fs::read_to_string(&test_output_path().to_str().unwrap())
         .expect("Failed to read output");
 
     assert!(content.contains("LINK=eth0"));
@@ -478,7 +487,7 @@ echo "ADDRESSES=$ADDRESSES" >> {}
     assert!(content.contains("ADDRESSES=192.168.1.100 10.0.0.5"));
 
     // Cleanup
-    let _ = fs::remove_file(TEST_SCRIPT_OUTPUT);
+    let _ = fs::remove_file(&test_output_path().to_str().unwrap());
 }
 
 /// Test multiple IP addresses on the same interface
@@ -656,7 +665,7 @@ async fn test_script_execution_order() {
     let script_dir = temp_dir.path().join("carrier.d");
     fs::create_dir_all(&script_dir).expect("Failed to create script dir");
 
-    let _ = fs::remove_file(TEST_SCRIPT_OUTPUT);
+    let _ = fs::remove_file(&test_output_path().to_str().unwrap());
 
     // Create multiple scripts with numeric prefixes
     for i in 1..=5 {
@@ -664,7 +673,7 @@ async fn test_script_execution_order() {
             r#"#!/bin/bash
 echo "Script {}: $LINK" >> {}
 "#,
-            i, TEST_SCRIPT_OUTPUT
+            i, &test_output_path().to_str().unwrap()
         );
         let script_name = format!("{:02}-script.sh", i);
         create_test_script(&script_dir, &script_name, &script_content)
@@ -688,7 +697,7 @@ echo "Script {}: $LINK" >> {}
     }
 
     // Verify execution order
-    let content = fs::read_to_string(TEST_SCRIPT_OUTPUT)
+    let content = fs::read_to_string(&test_output_path().to_str().unwrap())
         .expect("Failed to read output");
 
     let lines: Vec<&str> = content.lines().collect();
@@ -702,7 +711,7 @@ echo "Script {}: $LINK" >> {}
         );
     }
 
-    let _ = fs::remove_file(TEST_SCRIPT_OUTPUT);
+    let _ = fs::remove_file(&test_output_path().to_str().unwrap());
 }
 
 /// Test script failure handling
@@ -793,13 +802,13 @@ async fn test_no_carrier_event() {
         r#"#!/bin/bash
 echo "NO-CARRIER: $LINK" >> {}
 "#,
-        TEST_SCRIPT_OUTPUT
+        &test_output_path().to_str().unwrap()
     );
 
     create_test_script(&no_carrier_dir, "01-test.sh", &script_content)
         .expect("Failed to create script");
 
-    let _ = fs::remove_file(TEST_SCRIPT_OUTPUT);
+    let _ = fs::remove_file(&test_output_path().to_str().unwrap());
 
     create_dummy_interface(TEST_INTERFACE).expect("Failed to create interface");
     bring_interface_up(TEST_INTERFACE).expect("Failed to bring up interface");
@@ -820,7 +829,7 @@ echo "NO-CARRIER: $LINK" >> {}
     assert!(output.status.success());
 
     delete_interface(TEST_INTERFACE).expect("Failed to delete interface");
-    let _ = fs::remove_file(TEST_SCRIPT_OUTPUT);
+    let _ = fs::remove_file(&test_output_path().to_str().unwrap());
 }
 
 /// Test rapid state changes

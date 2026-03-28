@@ -147,10 +147,16 @@ pub async fn health_check() -> Json<HealthStatus> {
 
 /// GET /metrics
 pub async fn metrics() -> String {
-    format!(
+    let info_line = format!(
         "# HELP netevd_info netevd daemon information\n\
          # TYPE netevd_info gauge\n\
          netevd_info{{version=\"{}\"}} 1\n",
         env!("CARGO_PKG_VERSION")
-    )
+    );
+
+    if let Some(handle) = crate::metrics::get_global_metrics() {
+        format!("{}{}", info_line, handle.gather())
+    } else {
+        info_line
+    }
 }
