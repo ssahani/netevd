@@ -144,10 +144,10 @@ async fn handle_link_signal(
     // Record metrics for state change
     if let Some(ref m) = metrics {
         m.interface_state_changes
-            .with_label_values(&[&link_name, &current_state])
+            .with_label_values(&[link_name.as_str(), current_state.as_str()])
             .inc();
         m.events_total
-            .with_label_values(&[&current_state, &link_name, "systemd-networkd"])
+            .with_label_values(&[current_state.as_str(), link_name.as_str(), "systemd-networkd"])
             .inc();
     }
 

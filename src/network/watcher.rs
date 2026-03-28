@@ -9,8 +9,8 @@
 use anyhow::Result;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::stream::StreamExt;
-use netlink_packet_core::NetlinkMessage;
-use netlink_packet_route::RouteNetlinkMessage;
+use rtnetlink::packet_core::NetlinkMessage;
+use rtnetlink::packet_route::RouteNetlinkMessage;
 use netlink_sys::{protocols::NETLINK_ROUTE, SocketAddr as NetlinkSocketAddr, TokioSocket};
 use rtnetlink::Handle;
 use std::collections::HashSet;
@@ -48,7 +48,7 @@ fn new_event_receiver(
     std::mem::forget(socket);
     let async_socket = unsafe { TokioSocket::from_raw_fd(raw_fd) };
     let (conn, _handle, messages) =
-        netlink_proto::from_socket_with_codec::<RouteNetlinkMessage, TokioSocket, netlink_proto::NetlinkCodec>(async_socket);
+        rtnetlink::proto::from_socket_with_codec::<RouteNetlinkMessage, TokioSocket, rtnetlink::proto::NetlinkCodec>(async_socket);
     Ok((async move { conn.await; }, messages))
 }
 
@@ -72,11 +72,11 @@ pub async fn watch_addresses(
 
     // Process address change events in real-time
     while let Some((message, _)) = messages.next().await {
-        use netlink_packet_route::RouteNetlinkMessage;
+        use rtnetlink::packet_route::RouteNetlinkMessage;
 
         let (event_type, msg) = match message.payload {
-            netlink_packet_core::NetlinkPayload::InnerMessage(RouteNetlinkMessage::NewAddress(msg)) => ("new", msg),
-            netlink_packet_core::NetlinkPayload::InnerMessage(RouteNetlinkMessage::DelAddress(msg)) => ("del", msg),
+            rtnetlink::packet_core::NetlinkPayload::InnerMessage(RouteNetlinkMessage::NewAddress(msg)) => ("new", msg),
+            rtnetlink::packet_core::NetlinkPayload::InnerMessage(RouteNetlinkMessage::DelAddress(msg)) => ("del", msg),
             _ => continue,
         };
         let ifindex = msg.header.index;
@@ -179,16 +179,16 @@ pub async fn watch_routes(_handle: Handle, state: Arc<RwLock<NetworkState>>) -> 
 
     // Process route change events
     while let Some((message, _)) = messages.next().await {
-        use netlink_packet_route::RouteNetlinkMessage;
+        use rtnetlink::packet_route::RouteNetlinkMessage;
 
         let (event_type, msg) = match message.payload {
-            netlink_packet_core::NetlinkPayload::InnerMessage(RouteNetlinkMessage::NewRoute(msg)) => ("new", msg),
-            netlink_packet_core::NetlinkPayload::InnerMessage(RouteNetlinkMessage::DelRoute(msg)) => ("del", msg),
+            rtnetlink::packet_core::NetlinkPayload::InnerMessage(RouteNetlinkMessage::NewRoute(msg)) => ("new", msg),
+            rtnetlink::packet_core::NetlinkPayload::InnerMessage(RouteNetlinkMessage::DelRoute(msg)) => ("del", msg),
             _ => continue,
         };
 
         // Extract output interface from attributes
-        use netlink_packet_route::route::RouteAttribute;
+        use rtnetlink::packet_route::route::RouteAttribute;
         let ifindex = msg
             .attributes
             .iter()
@@ -247,11 +247,11 @@ pub async fn watch_links(_handle: Handle, state: Arc<RwLock<NetworkState>>) -> R
 
     // Process link change events
     while let Some((message, _)) = messages.next().await {
-        use netlink_packet_route::RouteNetlinkMessage;
+        use rtnetlink::packet_route::RouteNetlinkMessage;
 
         let (event_type, msg) = match message.payload {
-            netlink_packet_core::NetlinkPayload::InnerMessage(RouteNetlinkMessage::NewLink(msg)) => ("new", msg),
-            netlink_packet_core::NetlinkPayload::InnerMessage(RouteNetlinkMessage::DelLink(msg)) => ("del", msg),
+            rtnetlink::packet_core::NetlinkPayload::InnerMessage(RouteNetlinkMessage::NewLink(msg)) => ("new", msg),
+            rtnetlink::packet_core::NetlinkPayload::InnerMessage(RouteNetlinkMessage::DelLink(msg)) => ("del", msg),
             _ => continue,
         };
         let ifindex = msg.header.index;
@@ -260,7 +260,7 @@ pub async fn watch_links(_handle: Handle, state: Arc<RwLock<NetworkState>>) -> R
 
         // For link additions, extract link name from the message and update state
         if event_type == "new" {
-            use netlink_packet_route::link::LinkAttribute;
+            use rtnetlink::packet_route::link::LinkAttribute;
             let link_name = msg.attributes.iter().find_map(|attr| {
                 if let LinkAttribute::IfName(name) = attr {
                     Some(name.clone())

@@ -4,8 +4,8 @@
 
 use anyhow::{Context, Result};
 use futures::stream::TryStreamExt;
-use netlink_packet_route::address::AddressAttribute;
-use netlink_packet_route::AddressFamily;
+use rtnetlink::packet_route::address::AddressAttribute;
+use rtnetlink::packet_route::AddressFamily;
 use rtnetlink::Handle;
 use std::net::IpAddr;
 use tracing::debug;

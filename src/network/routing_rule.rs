@@ -4,7 +4,7 @@
 
 use anyhow::{Context, Result};
 use futures::stream::TryStreamExt;
-use netlink_packet_route::rule::{RuleAction, RuleAttribute, RuleMessage};
+use rtnetlink::packet_route::rule::{RuleAction, RuleAttribute, RuleMessage};
 use rtnetlink::Handle;
 use std::net::IpAddr;
 use tracing::{debug, info, warn};

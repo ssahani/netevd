@@ -137,10 +137,10 @@ async fn process_lease_file(
         // Record metrics for DHCP lease event
         if let Some(ref m) = &metrics {
             m.interface_state_changes
-                .with_label_values(&[interface, "routable"])
+                .with_label_values(&[interface.as_str(), "routable"])
                 .inc();
             m.events_total
-                .with_label_values(&["routable", interface, "dhclient"])
+                .with_label_values(&["routable", interface.as_str(), "dhclient"])
                 .inc();
         }
 

@@ -4,7 +4,7 @@
 
 use anyhow::{Context, Result};
 use futures::stream::TryStreamExt;
-use netlink_packet_route::link::LinkAttribute;
+use rtnetlink::packet_route::link::LinkAttribute;
 use rtnetlink::Handle;
 use tracing::{debug, info};
 

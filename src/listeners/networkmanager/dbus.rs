@@ -154,10 +154,10 @@ async fn handle_device_state_changed(
     // Record metrics for state change
     if let Some(ref m) = metrics {
         m.interface_state_changes
-            .with_label_values(&[&interface, &state_name])
+            .with_label_values(&[interface.as_str(), state_name.as_str()])
             .inc();
         m.events_total
-            .with_label_values(&[&state_name, &interface, "NetworkManager"])
+            .with_label_values(&[state_name.as_str(), interface.as_str(), "NetworkManager"])
             .inc();
     }
 

@@ -4,8 +4,9 @@
 
 use anyhow::{Context, Result};
 use futures::stream::TryStreamExt;
-use netlink_packet_route::route::{RouteAddress, RouteAttribute, RouteMessage};
-use rtnetlink::Handle;
+use rtnetlink::packet_route::route::{RouteAddress, RouteAttribute, RouteMessage};
+use rtnetlink::packet_route::AddressFamily;
+use rtnetlink::{Handle, RouteMessageBuilder};
 use std::net::IpAddr;
 use tracing::{debug, info, warn};
 
@@ -13,7 +14,9 @@ use super::routing_rule::ROUTE_TABLE_BASE;
 
 /// Discover the default gateway for a specific interface
 pub async fn discover_gateway(handle: &Handle, ifindex: u32) -> Result<Option<IpAddr>> {
-    let mut routes = handle.route().get(rtnetlink::IpVersion::V4).execute();
+    let mut get_msg = RouteMessage::default();
+    get_msg.header.address_family = AddressFamily::Inet;
+    let mut routes = handle.route().get(get_msg).execute();
 
     while let Some(route) = routes
         .try_next()
@@ -58,14 +61,15 @@ pub async fn add_route(
     // Convert gateway to the proper type
     match gateway {
         IpAddr::V4(gw_v4) => {
-            handle
-                .route()
-                .add()
-                .v4()
+            let route_msg = RouteMessageBuilder::<std::net::Ipv4Addr>::new()
                 .destination_prefix(std::net::Ipv4Addr::new(0, 0, 0, 0), 0) // 0.0.0.0/0
                 .gateway(gw_v4)
                 .output_interface(ifindex)
                 .table_id(table)
+                .build();
+            handle
+                .route()
+                .add(route_msg)
                 .execute()
                 .await
                 .with_context(|| {
@@ -76,14 +80,15 @@ pub async fn add_route(
                 })?;
         }
         IpAddr::V6(gw_v6) => {
-            handle
-                .route()
-                .add()
-                .v6()
+            let route_msg = RouteMessageBuilder::<std::net::Ipv6Addr>::new()
                 .destination_prefix(std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0)
                 .gateway(gw_v6)
                 .output_interface(ifindex)
                 .table_id(table)
+                .build();
+            handle
+                .route()
+                .add(route_msg)
                 .execute()
                 .await
                 .with_context(|| {
@@ -106,7 +111,9 @@ pub async fn remove_route(handle: &Handle, ifindex: u32, table: u32) -> Result<(
     let mut removed = false;
 
     // Remove IPv4 routes
-    let mut routes = handle.route().get(rtnetlink::IpVersion::V4).execute();
+    let mut get_v4 = RouteMessage::default();
+    get_v4.header.address_family = AddressFamily::Inet;
+    let mut routes = handle.route().get(get_v4).execute();
     while let Some(route) = routes
         .try_next()
         .await
@@ -123,7 +130,9 @@ pub async fn remove_route(handle: &Handle, ifindex: u32, table: u32) -> Result<(
     }
 
     // Remove IPv6 routes
-    let mut routes_v6 = handle.route().get(rtnetlink::IpVersion::V6).execute();
+    let mut get_v6 = RouteMessage::default();
+    get_v6.header.address_family = AddressFamily::Inet6;
+    let mut routes_v6 = handle.route().get(get_v6).execute();
     while let Some(route) = routes_v6
         .try_next()
         .await
