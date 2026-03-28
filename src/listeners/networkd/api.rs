@@ -118,14 +118,3 @@ pub fn parse_manager_state_file() -> Result<ManagerState> {
     Ok(state)
 }
 
-/// Get operational state for a link (key state indicator)
-pub fn get_link_operational_state(ifindex: u32) -> String {
-    parse_link_state_file(ifindex)
-        .map(|state| state.oper_state)
-        .unwrap_or_else(|_| "unknown".to_string())
-}
-
-/// Check if link is in routable state
-pub fn is_link_routable(ifindex: u32) -> bool {
-    get_link_operational_state(ifindex) == "routable"
-}

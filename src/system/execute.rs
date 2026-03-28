@@ -104,9 +104,22 @@ async fn execute_script(script_path: &Path, env_vars: &HashMap<String, String>) 
 
     let mut cmd = Command::new(script_path);
 
-    // Start with a clean environment to prevent leaking daemon env vars
+    // Start with a clean environment to prevent leaking daemon env vars,
+    // but preserve essential variables scripts may need
     cmd.env_clear();
     cmd.env("PATH", "/usr/sbin:/usr/bin:/sbin:/bin");
+    if let Ok(home) = std::env::var("HOME") {
+        cmd.env("HOME", home);
+    }
+    if let Ok(user) = std::env::var("USER") {
+        cmd.env("USER", user);
+    }
+    if let Ok(lang) = std::env::var("LANG") {
+        cmd.env("LANG", lang);
+    }
+    if let Ok(tz) = std::env::var("TZ") {
+        cmd.env("TZ", tz);
+    }
 
     // Validate and set environment variables
     // This is defense-in-depth: even though scripts should quote variables,
@@ -152,10 +165,17 @@ async fn execute_script(script_path: &Path, env_vars: &HashMap<String, String>) 
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    // Execute the command with timeout
-    let output = tokio::time::timeout(SCRIPT_TIMEOUT, cmd.output())
+    // Spawn the child with kill_on_drop so it is killed if we bail on timeout
+    cmd.kill_on_drop(true);
+    let child = cmd.spawn()
+        .with_context(|| format!("Failed to spawn script: {:?}", script_path))?;
+
+    let output = tokio::time::timeout(SCRIPT_TIMEOUT, child.wait_with_output())
         .await
-        .map_err(|_| anyhow::anyhow!("Script {:?} timed out after {}s", script_path, SCRIPT_TIMEOUT.as_secs()))?
+        .map_err(|_| anyhow::anyhow!(
+            "Script {:?} timed out after {}s (process killed)",
+            script_path, SCRIPT_TIMEOUT.as_secs()
+        ))?
         .with_context(|| format!("Failed to execute script: {:?}", script_path))?;
 
     // Log output

@@ -167,18 +167,12 @@ impl Filter {
     }
 
     fn evaluate_condition(&self, condition: &str, event: &NetworkEvent) -> bool {
-        // Handle compound conditions with && and ||
-        if condition.contains("&&") {
-            return condition
+        // Split on || first (lower precedence), then && within each group
+        condition.split("||").any(|or_group| {
+            or_group
                 .split("&&")
-                .all(|sub| self.evaluate_single_condition(sub.trim(), event));
-        }
-        if condition.contains("||") {
-            return condition
-                .split("||")
-                .any(|sub| self.evaluate_single_condition(sub.trim(), event));
-        }
-        self.evaluate_single_condition(condition.trim(), event)
+                .all(|sub| self.evaluate_single_condition(sub.trim(), event))
+        })
     }
 
     fn evaluate_single_condition(&self, condition: &str, event: &NetworkEvent) -> bool {

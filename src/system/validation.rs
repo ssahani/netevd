@@ -59,15 +59,22 @@ pub fn validate_domain_name(domain: &str) -> bool {
         return false;
     }
 
-    for label in domain.split('.') {
+    for (i, label) in domain.split('.').enumerate() {
         if label.is_empty() || label.len() > 63 {
             return false;
         }
 
         // Allow wildcard prefix only on the first label
-        let label_to_check = label.strip_prefix('*').unwrap_or(label);
+        let label_to_check = if i == 0 {
+            label.strip_prefix('*').unwrap_or(label)
+        } else if label.contains('*') {
+            return false; // wildcard not allowed on non-first labels
+        } else {
+            label
+        };
+
         if label_to_check.is_empty() {
-            continue; // bare wildcard label is valid as first label
+            continue; // bare wildcard as first label is valid
         }
 
         if label_to_check.starts_with('-') || label_to_check.ends_with('-') {
@@ -127,6 +134,7 @@ pub fn sanitize_env_value(value: &str) -> Option<String> {
 /// Validate a network state string (used for script directory names)
 pub fn validate_state_name(state: &str) -> bool {
     // Only allow known safe state names
+    // Includes all systemd-networkd operational states and NetworkManager states
     matches!(
         state,
         "carrier"
@@ -138,6 +146,11 @@ pub fn validate_state_name(state: &str) -> bool {
             | "disconnected"
             | "manager"
             | "routes"
+            | "off"
+            | "dormant"
+            | "enslaved"
+            | "linger"
+            | "missing"
     )
 }
 
@@ -180,6 +193,7 @@ mod tests {
 
         assert!(!validate_domain_name(""));
         assert!(!validate_domain_name("invalid domain"));
+        assert!(!validate_domain_name("foo.*.com")); // wildcard only on first label
     }
 
     #[test]

@@ -44,12 +44,18 @@ fn new_event_receiver(
         socket.add_membership(*group)?;
     }
     socket.set_non_blocking(true)?;
+
+    // Transfer fd ownership: extract the raw fd before forgetting the socket
+    // to prevent its destructor from closing it. TokioSocket takes ownership.
+    // Note: if TokioSocket::from_raw_fd panics, the fd leaks — but this only
+    // happens on tokio registration failure which is unrecoverable anyway.
     let raw_fd = socket.as_raw_fd();
     std::mem::forget(socket);
     let async_socket = unsafe { TokioSocket::from_raw_fd(raw_fd) };
+
     let (conn, _handle, messages) =
         rtnetlink::proto::from_socket_with_codec::<RouteNetlinkMessage, TokioSocket, rtnetlink::proto::NetlinkCodec>(async_socket);
-    Ok((async move { conn.await; }, messages))
+    Ok((async move { let _ = conn.await; }, messages))
 }
 
 /// Watch for address changes using real-time netlink events
