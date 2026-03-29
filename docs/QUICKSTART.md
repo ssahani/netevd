@@ -1,36 +1,28 @@
 <!-- SPDX-License-Identifier: LGPL-3.0-or-later -->
 
-# Quick Start Guide
+# Quick Start
 
-Get netevd up and running in 5 minutes.
+Get netevd running in 5 minutes. By the end, you'll have a daemon watching your network interfaces and executing custom scripts on state changes.
 
-## What is netevd?
+## What netevd Does
 
-netevd is a network event daemon that watches your network interfaces and runs scripts when things change. Think of it as "cron for your network" - when your interface gets an IP address, loses its connection, or routes change, netevd automatically executes your custom scripts.
-
-```mermaid
-graph LR
-    NET[Network Change<br/>IP added, link up, etc.] --> NETEVD[netevd<br/>Watches & Detects]
-    NETEVD --> SCRIPT[Your Script<br/>Runs automatically]
-    SCRIPT --> ACTION[Custom Action<br/>Update DNS, notify, etc.]
-
-    style NET fill:#2196f3,color:#fff
-    style NETEVD fill:#4caf50,color:#fff
-    style ACTION fill:#ff9800,color:#fff
+```
+Network change  --->  netevd detects it  --->  Your script runs
+(IP added,            (via netlink /           (update DNS,
+ link down,            DBus / inotify)          send alert,
+ route changed)                                 configure VPN...)
 ```
 
-## 5-Minute Setup
+## Step 1: Install
 
-### Step 1: Install (2 minutes)
-
-**Option A: From Source (Recommended)**
+**From source (recommended):**
 
 ```bash
-# Install Rust (if not already installed)
+# Install Rust if needed
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
 
-# Clone and build
+# Build
 git clone https://github.com/ssahani/netevd.git
 cd netevd
 cargo build --release
@@ -41,446 +33,134 @@ sudo install -Dm644 systemd/netevd.service /lib/systemd/system/netevd.service
 sudo install -Dm644 examples/netevd.yaml /etc/netevd/netevd.yaml
 ```
 
-**Option B: From Package**
+**From package:**
 
 ```bash
-# Arch Linux
-yay -S netevd
-
-# Fedora/RHEL (download RPM from releases)
-sudo dnf install netevd-*.rpm
-
-# Debian/Ubuntu (download DEB from releases)
-sudo dpkg -i netevd_*.deb
+yay -S netevd                          # Arch Linux
+sudo dnf install netevd-*.rpm          # Fedora/RHEL
+sudo dpkg -i netevd_*.deb             # Debian/Ubuntu
 ```
 
-### Step 2: Create User & Directories (1 minute)
+## Step 2: Create User and Directories
 
 ```bash
-# Create netevd user
 sudo useradd -r -M -s /usr/bin/nologin -d /nonexistent netevd
-
-# Create script directories
-sudo mkdir -p /etc/netevd/{carrier.d,no-carrier.d,routable.d,routes.d}
+sudo mkdir -p /etc/netevd/{carrier.d,no-carrier.d,configured.d,degraded.d,routable.d,activated.d,disconnected.d,manager.d,routes.d}
 ```
 
-### Step 3: Create Your First Script (1 minute)
-
-Let's create a simple script that logs when an interface becomes routable:
+## Step 3: Write Your First Script
 
 ```bash
 sudo tee /etc/netevd/routable.d/01-notify.sh > /dev/null << 'EOF'
 #!/bin/bash
-# This runs when an interface gets full network connectivity
-
-echo "$(date): Interface $LINK is routable with IP $ADDRESSES" | \
-    logger -t netevd
-
-# You can add any commands here:
-# - Send notifications
-# - Update DNS
-# - Start services
-# - etc.
+logger -t netevd "$(date): $LINK is routable with $ADDRESSES"
 EOF
-
-# Make it executable
 sudo chmod +x /etc/netevd/routable.d/01-notify.sh
 ```
 
-### Step 4: Start netevd (1 minute)
+## Step 4: Start
 
 ```bash
-# Start and enable the service
 sudo systemctl daemon-reload
 sudo systemctl enable --now netevd
-
-# Check it's running
 sudo systemctl status netevd
-
-# Watch the logs
-sudo journalctl -u netevd -f
 ```
 
-### Step 5: Test It!
-
-Trigger a network event:
+## Step 5: Test
 
 ```bash
-# Bring interface down and up
-sudo ip link set eth0 down
-sudo ip link set eth0 up
+# Trigger an event
+sudo ip link set eth0 down && sudo ip link set eth0 up
 
-# Check the logs - you should see your script ran!
-sudo journalctl -u netevd -n 20
-
-# Check system log for our script's output
+# Check it worked
 sudo journalctl -t netevd -n 10
 ```
 
-You should see output like:
-```
-Jan 23 10:30:45 hostname netevd: Interface eth0 is routable with IP 192.168.1.100
-```
+You should see your script's output in the logs.
 
-**Congratulations!** 🎉 netevd is now running and executing your scripts on network events.
+## What Variables Can Scripts Use?
 
-## What Just Happened?
+| Variable | Example | Description |
+|----------|---------|-------------|
+| `$LINK` | `eth0` | Interface name |
+| `$LINKINDEX` | `2` | Kernel interface index |
+| `$STATE` | `routable` | Current state |
+| `$BACKEND` | `systemd-networkd` | Which network manager |
+| `$ADDRESSES` | `192.168.1.100 10.0.0.5` | Space-separated IPs |
+| `$JSON` | `{"Index":2,...}` | Full data (systemd-networkd only) |
 
-```mermaid
-sequenceDiagram
-    participant U as You
-    participant E as eth0
-    participant N as netevd
-    participant S as Script
-    participant L as Logger
+## Script Directories
 
-    U->>E: ip link set eth0 down
-    U->>E: ip link set eth0 up
+| Directory | When scripts run |
+|-----------|-----------------|
+| `carrier.d/` | Cable connected |
+| `no-carrier.d/` | Cable disconnected |
+| `routable.d/` | Interface has full connectivity |
+| `configured.d/` | Interface has IP (systemd-networkd) |
+| `degraded.d/` | Partial config (systemd-networkd) |
+| `activated.d/` | Device activated (NetworkManager) |
+| `disconnected.d/` | Device disconnected (NetworkManager) |
+| `routes.d/` | Routing table changed |
 
-    E->>N: Interface up event
-    N->>N: Detect routable state
-    N->>S: Execute /etc/netevd/routable.d/01-notify.sh
-    S->>S: Read $LINK, $ADDRESSES
-    S->>L: Log message
-    L-->>S: Logged
-    S-->>N: Exit 0 (success)
+Scripts run alphabetically. Use `01-`, `02-` prefixes to control order.
 
-    Note over U,L: Message appears in journalctl
-```
+## More Examples
 
-## Next Steps
-
-### Add More Functionality
-
-**Example: Send Email When Link Goes Down**
+**Alert on link down:**
 
 ```bash
 sudo tee /etc/netevd/no-carrier.d/01-alert.sh > /dev/null << 'EOF'
 #!/bin/bash
-# Alert when cable is unplugged
-
-echo "ALERT: Interface $LINK lost carrier at $(date)" | \
+echo "ALERT: $LINK lost carrier at $(date)" | \
     mail -s "Network Alert: Link Down" admin@example.com
-
-logger -t netevd "ALERT: $LINK is down"
 EOF
-
 sudo chmod +x /etc/netevd/no-carrier.d/01-alert.sh
 ```
 
-**Example: Update Dynamic DNS**
+**Update dynamic DNS:**
 
 ```bash
-sudo tee /etc/netevd/routable.d/02-update-dns.sh > /dev/null << 'EOF'
+sudo tee /etc/netevd/routable.d/02-ddns.sh > /dev/null << 'EOF'
 #!/bin/bash
-# Update DuckDNS when IP changes
-
-if [ "$LINK" = "eth0" ]; then
-    IP=$(echo "$ADDRESSES" | awk '{print $1}')
-    DOMAIN="yourdomain"
-    TOKEN="your-token"
-
-    curl -s "https://www.duckdns.org/update?domains=$DOMAIN&token=$TOKEN&ip=$IP"
-    logger -t netevd "Updated DNS: $DOMAIN -> $IP"
-fi
+[ "$LINK" = "eth0" ] || exit 0
+IP=$(echo "$ADDRESSES" | awk '{print $1}')
+curl -s "https://www.duckdns.org/update?domains=YOURDOMAIN&token=TOKEN&ip=$IP"
+logger -t netevd "Updated DNS: $IP"
 EOF
-
-sudo chmod +x /etc/netevd/routable.d/02-update-dns.sh
+sudo chmod +x /etc/netevd/routable.d/02-ddns.sh
 ```
 
-### Configure for Your Backend
+## Switching Backends
 
-netevd supports three network manager backends. Choose the one you use:
+The default backend is systemd-networkd. To use a different one, edit `/etc/netevd/netevd.yaml`:
 
-**systemd-networkd (Default)**
-
-Already configured! No changes needed.
-
-**NetworkManager**
-
-```bash
-sudo nano /etc/netevd/netevd.yaml
-```
-
-Change:
 ```yaml
 system:
-  backend: "NetworkManager"  # Change from systemd-networkd
+  backend: "NetworkManager"    # or "dhclient"
 ```
 
-Then restart:
-```bash
-sudo systemctl restart netevd
-```
-
-**dhclient**
-
-```bash
-sudo nano /etc/netevd/netevd.yaml
-```
-
-Change:
-```yaml
-system:
-  backend: "dhclient"
-```
-
-Then restart:
-```bash
-sudo systemctl restart netevd
-```
-
-### Monitor Specific Interfaces
-
-By default, netevd monitors all interfaces. To monitor only specific ones:
-
-```bash
-sudo nano /etc/netevd/netevd.yaml
-```
-
-Add:
-```yaml
-monitoring:
-  interfaces:
-    - eth0
-    - wlan0
-```
-
-Restart:
-```bash
-sudo systemctl restart netevd
-```
-
-## Common Use Cases
-
-### 1. Multi-Interface Routing
-
-If you have multiple network interfaces and need traffic to use the correct one:
-
-```yaml
-# /etc/netevd/netevd.yaml
-routing:
-  policy_rules:
-    - eth1  # Enable automatic routing for eth1
-```
-
-See full example: [Multi-Homed Server](EXAMPLES.md#multi-homed-server)
-
-### 2. VPN Integration
-
-Automatically route specific networks through VPN when it connects:
-
-See full example: [VPN Integration](EXAMPLES.md#vpn-integration)
-
-### 3. High Availability
-
-Automatic failover between network interfaces:
-
-See full example: [High Availability Setup](EXAMPLES.md#high-availability-setup)
-
-## Available Environment Variables
-
-Your scripts receive these environment variables:
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `$LINK` | Interface name | `eth0` |
-| `$LINKINDEX` | Interface index number | `2` |
-| `$STATE` | Current state | `routable` |
-| `$BACKEND` | Network manager | `systemd-networkd` |
-| `$ADDRESSES` | IP addresses (space-separated) | `192.168.1.100 10.0.0.5` |
-| `$JSON` | Full interface data (systemd-networkd) | `{"Index":2,"Name":"eth0",...}` |
-
-**Example using variables:**
-
-```bash
-#!/bin/bash
-echo "Interface: $LINK"
-echo "Index: $LINKINDEX"
-echo "State: $STATE"
-echo "Backend: $BACKEND"
-echo "IPs: $ADDRESSES"
-
-# Extract first IP
-FIRST_IP=$(echo "$ADDRESSES" | awk '{print $1}')
-echo "Primary IP: $FIRST_IP"
-
-# Parse JSON (requires jq)
-if [ -n "$JSON" ]; then
-    MTU=$(echo "$JSON" | jq -r '.MTU')
-    echo "MTU: $MTU"
-fi
-```
-
-## Script Directories
-
-Scripts are organized by event type:
-
-```
-/etc/netevd/
-├── carrier.d/          # Cable connected (link has carrier)
-├── no-carrier.d/       # Cable disconnected (link lost carrier)
-├── routable.d/         # Interface fully operational
-├── configured.d/       # Interface configured (has IP)
-├── degraded.d/         # Interface partially working
-├── activated.d/        # NetworkManager: device activated
-├── disconnected.d/     # NetworkManager: device disconnected
-├── manager.d/          # Network manager state changes
-└── routes.d/           # Routing table changes
-```
-
-**Script execution order:**
-- Scripts run in alphabetical order
-- Use numeric prefixes: `01-`, `02-`, `03-`
-- Exit code 0 = success, non-zero = error (logged but doesn't stop other scripts)
+Then restart: `sudo systemctl restart netevd`
 
 ## Debugging
 
-### View Logs
-
 ```bash
-# Follow logs in real-time
-sudo journalctl -u netevd -f
+sudo journalctl -u netevd -f                        # Follow logs
+sudo journalctl -u netevd | grep "Executing"         # Find script runs
 
-# View recent logs
-sudo journalctl -u netevd -n 50
-
-# Search for script executions
-sudo journalctl -u netevd | grep "Executing"
-
-# View script output
-sudo journalctl -t netevd  # From logger commands in scripts
-```
-
-### Enable Debug Logging
-
-```bash
-# Edit config
-sudo nano /etc/netevd/netevd.yaml
-
-# Change log level
-system:
-  log_level: "debug"  # or "trace" for even more detail
-
-# Restart
-sudo systemctl restart netevd
-
-# Now logs will be much more verbose
-sudo journalctl -u netevd -f
-```
-
-### Test Scripts Manually
-
-```bash
-# Run script with environment variables
-sudo env \
-    LINK=eth0 \
-    LINKINDEX=2 \
-    STATE=routable \
-    BACKEND=systemd-networkd \
+# Test a script manually
+sudo env LINK=eth0 LINKINDEX=2 STATE=routable \
     ADDRESSES="192.168.1.100" \
     /etc/netevd/routable.d/01-notify.sh
 
-# Test with bash debugging
-sudo env LINK=eth0 STATE=routable \
-    bash -x /etc/netevd/routable.d/01-notify.sh
-```
-
-### Common Issues
-
-**Script not executing?**
-
-```bash
-# Check if executable
-ls -la /etc/netevd/routable.d/
-
-# Make executable
-sudo chmod +x /etc/netevd/routable.d/*.sh
-
-# Check shebang line
-head -1 /etc/netevd/routable.d/01-notify.sh
-# Should show: #!/bin/bash
-```
-
-**Service won't start?**
-
-```bash
-# Check status
-sudo systemctl status netevd -l
-
-# Check config syntax
-yamllint /etc/netevd/netevd.yaml
-
-# Check if user exists
-id netevd
-# If not: sudo useradd -r -M -s /usr/bin/nologin netevd
-```
-
-**No events received?**
-
-```bash
-# Check backend is running
-sudo systemctl status systemd-networkd  # or NetworkManager
-
-# Trigger manual event
-sudo ip link set eth0 down
-sudo ip link set eth0 up
-
-# Check logs immediately
-sudo journalctl -u netevd -n 20
-```
-
-## Where to Go from Here
-
-**Basic Usage:**
-- [Configuration Guide](../CONFIGURATION.md) - All configuration options
-- [Examples](EXAMPLES.md) - Real-world scenarios
-
-**Integration:**
-- [REST API](API.md) - Automate via HTTP API
-- [Prometheus Metrics](METRICS.md) - Monitor with Prometheus/Grafana
-
-**Advanced:**
-- [Architecture](ARCHITECTURE.md) - How netevd works internally
-- [Troubleshooting](TROUBLESHOOTING.md) - Solve problems
-- [Contributing](../CONTRIBUTING.md) - Contribute code
-
-## Getting Help
-
-- Documentation: [docs/README.md](README.md)
-- Issues: https://github.com/ssahani/netevd/issues
-- Discussions: https://github.com/ssahani/netevd/discussions
-
-## Cheat Sheet
-
-```bash
-# Service management
-sudo systemctl start netevd
-sudo systemctl stop netevd
+# Enable verbose logging
+sudo sed -i 's/log_level: "info"/log_level: "debug"/' /etc/netevd/netevd.yaml
 sudo systemctl restart netevd
-sudo systemctl status netevd
-
-# View logs
-sudo journalctl -u netevd -f        # Follow logs
-sudo journalctl -u netevd -n 50     # Last 50 lines
-sudo journalctl -u netevd --since "1 hour ago"
-
-# Configuration
-sudo nano /etc/netevd/netevd.yaml   # Edit config
-yamllint /etc/netevd/netevd.yaml    # Validate syntax
-sudo systemctl restart netevd       # Apply changes
-
-# Scripts
-ls -la /etc/netevd/routable.d/      # List scripts
-sudo chmod +x /etc/netevd/routable.d/*.sh  # Make executable
-sudo nano /etc/netevd/routable.d/01-test.sh # Edit script
-
-# Debugging
-sudo env LINK=eth0 /etc/netevd/routable.d/01-test.sh  # Test script
-netevd --version                    # Check version
-ip link show                        # Show interfaces
-ip addr show                        # Show IP addresses
-ip route show                       # Show routes
 ```
 
-Happy scripting! 🚀
+## Next Steps
+
+- [Configuration Guide](../CONFIGURATION.md) -- All YAML options
+- [Real-World Examples](EXAMPLES.md) -- Multi-homing, VPN, HA, containers
+- [REST API](API.md) -- Remote management via HTTP
+- [Prometheus Metrics](METRICS.md) -- Monitoring and alerting
+- [Troubleshooting](TROUBLESHOOTING.md) -- Common issues and fixes
